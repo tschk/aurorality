@@ -1,0 +1,16 @@
+[package]
+name = "aurorality-macros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Proc-macros for aurorality (#[aurorality::plugin])"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

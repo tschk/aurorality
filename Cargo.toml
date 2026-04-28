@@ -1,0 +1,21 @@
+[workspace]
+members = [
+    "crates/aurorality-core",
+    "crates/aurorality-macros",
+    "crates/aurorality-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Max Carter <max@undivisible.dev>"]
+license = "MPL-2.0"
+rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uniffi = { version = "0.31", features = ["cli"] }
+crepuscularity-native = { path = "../crepuscularity/crates/crepuscularity-native" }
+crepuscularity-core = { path = "../crepuscularity/crates/crepuscularity-core" }

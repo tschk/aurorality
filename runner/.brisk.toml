@@ -1,0 +1,19 @@
+[package]
+name = "AurorRunner"
+version = "0.1.0"
+
+[app]
+bundle_id = "dev.aurorality.runner"
+deployment_target = "17.0"
+sources = "Sources"
+
+[build]
+# Links the Rust dylib built from the workspace root.
+# Run `cargo build -p aurorality-core` from the repo root first.
+linker_flags = ["-L../target/debug", "-laurorality_core"]
+
+[pre_build]
+commands = [
+    "cargo build -p aurorality-core --manifest-path ../Cargo.toml",
+    "cargo run --manifest-path ../Cargo.toml -p aurorality-core --bin uniffi-bindgen generate --library ../target/debug/libaurorality_core.dylib --language swift --out-dir ../generated"
+]

@@ -1,0 +1,5 @@
+target/
+generated/
+.build/
+*.resolved
+.DS_Store

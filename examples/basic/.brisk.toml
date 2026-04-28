@@ -1,0 +1,19 @@
+[package]
+name = "AurorBasic"
+version = "0.1.0"
+
+[app]
+bundle_id = "dev.aurorality.example.basic"
+deployment_target = "17.0"
+sources = "Sources"
+resources = ["views"]
+
+[build]
+linker_flags = ["-L../../target/debug", "-laurorality_core"]
+
+[pre_build]
+commands = [
+    "cargo build -p aurorality-core --manifest-path ../../Cargo.toml",
+    "cargo run --manifest-path ../../Cargo.toml -p aurorality-core --bin uniffi-bindgen generate --library ../../target/debug/libaurorality_core.dylib --language swift --out-dir ../../generated",
+    "aurorality build --watch views --out ../../generated/ir"
+]

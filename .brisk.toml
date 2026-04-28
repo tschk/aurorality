@@ -1,0 +1,11 @@
+[package]
+name = "aurorality"
+version = "0.1.0"
+
+# Root-level build: builds the Rust core and generates Swift bindings.
+# Use this as a reference; individual apps have their own .brisk.toml.
+[pre_build]
+commands = [
+    "cargo build -p aurorality-core",
+    "cargo run -p aurorality-core --bin uniffi-bindgen generate --library target/debug/libaurorality_core.dylib --language swift --out-dir generated"
+]

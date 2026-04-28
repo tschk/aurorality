@@ -1,0 +1,8 @@
+div flex flex-col gap-6 p-8
+  span text-3xl font-bold
+    "Hello from aurorality"
+  span text-base
+    "Edit this file and watch SwiftUI update live in the Runner app."
+  div flex flex-row gap-2
+    span text-sm
+      "Built with .crepus + SwiftUI + Rust"

@@ -1,0 +1,23 @@
+[package]
+name = "aurorality-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "SwiftUI + Rust shell for .crepus templates — core library and UniFFI exports"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uniffi = { workspace = true }
+crepuscularity-native = { workspace = true }
+crepuscularity-core = { workspace = true }
+thiserror = "2"

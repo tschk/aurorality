@@ -1,0 +1,10 @@
+div flex flex-col gap-6 p-8
+  span text-2xl font-bold
+    "Count: {count}"
+  div flex flex-row gap-4
+    button
+      "Decrement"
+    button
+      "Increment"
+  span text-sm
+    "Last tick: {timestamp}"
