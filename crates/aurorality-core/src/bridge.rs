@@ -1,7 +1,7 @@
 //! Plugin registry — routes `plugin_invoke` calls to registered `NativePlugin` impls.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use serde_json::{json, Value};
 
@@ -9,24 +9,24 @@ use crate::plugins::{AppPlugin, CorePlugin, StatsPlugin};
 use crate::AurorError;
 
 pub trait NativePlugin: Send + Sync {
-    fn id(&self) -> &'static str;
-    fn methods(&self) -> &'static [&'static str];
+    fn id(&self) -> String;
+    fn methods(&self) -> Vec<String>;
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String>;
 }
 
 pub struct Bridge {
-    plugins: HashMap<String, Arc<dyn NativePlugin>>,
+    pub(crate) plugins: HashMap<String, Arc<dyn NativePlugin>>,
 }
 
 impl Bridge {
     pub fn new() -> Self {
         let mut plugins: HashMap<String, Arc<dyn NativePlugin>> = HashMap::new();
         let core: Arc<dyn NativePlugin> = Arc::new(CorePlugin);
-        plugins.insert(core.id().to_string(), core);
+        plugins.insert(core.id(), core);
         let app: Arc<dyn NativePlugin> = Arc::new(AppPlugin);
-        plugins.insert(app.id().to_string(), app);
+        plugins.insert(app.id(), app);
         let stats: Arc<dyn NativePlugin> = Arc::new(StatsPlugin);
-        plugins.insert(stats.id().to_string(), stats);
+        plugins.insert(stats.id(), stats);
         Self { plugins }
     }
 
@@ -50,7 +50,7 @@ impl Bridge {
             .get(plugin_id)
             .ok_or_else(|| format!("no plugin registered as {plugin_id:?}"))?;
 
-        if !plugin.methods().contains(&method) {
+        if !plugin.methods().iter().any(|m| m == method) {
             return Err(format!("plugin {plugin_id:?} has no method {method:?}"));
         }
 
@@ -65,9 +65,19 @@ impl Default for Bridge {
 }
 
 /// Global bridge instance used by UniFFI exports.
-pub fn global_bridge() -> &'static Bridge {
-    static BRIDGE: std::sync::OnceLock<Bridge> = std::sync::OnceLock::new();
-    BRIDGE.get_or_init(Bridge::new)
+pub fn global_bridge() -> &'static RwLock<Bridge> {
+    static BRIDGE: OnceLock<RwLock<Bridge>> = OnceLock::new();
+    BRIDGE.get_or_init(|| RwLock::new(Bridge::new()))
+}
+
+/// Register a plugin with the global bridge at runtime.
+/// Used by `aurorality-js` to register JS plugins.
+pub fn register_plugin(plugin: Arc<dyn NativePlugin>) {
+    global_bridge()
+        .write()
+        .unwrap()
+        .plugins
+        .insert(plugin.id(), plugin);
 }
 
 /// Invoke a plugin via the global bridge and return the JSON envelope string.
@@ -75,7 +85,7 @@ pub fn invoke(plugin_id: &str, method: &str, payload_json: &str) -> Result<Strin
     let payload: Value = serde_json::from_str(payload_json).map_err(|e| AurorError::InvalidContext {
         message: format!("invalid payload JSON: {e}"),
     })?;
-    let result = global_bridge().invoke_envelope(plugin_id, method, &payload);
+    let result = global_bridge().read().unwrap().invoke_envelope(plugin_id, method, &payload);
     serde_json::to_string(&result).map_err(|e| AurorError::RenderError {
         message: e.to_string(),
     })

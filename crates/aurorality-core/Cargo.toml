@@ -14,6 +14,11 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
+[features]
+# Enable the JavaScriptCore plugin backend (macOS/iOS only).
+# Builds the `js` module which wraps JSC and exposes `js_load_plugin` via UniFFI.
+js = []
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

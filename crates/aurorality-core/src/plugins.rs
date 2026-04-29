@@ -22,12 +22,12 @@ fn entropy_u32() -> u32 {
 pub struct CorePlugin;
 
 impl NativePlugin for CorePlugin {
-    fn id(&self) -> &'static str {
-        "core"
+    fn id(&self) -> String {
+        "core".to_string()
     }
 
-    fn methods(&self) -> &'static [&'static str] {
-        &["echo", "ping", "timestamp", "randomU32"]
+    fn methods(&self) -> Vec<String> {
+        vec!["echo".into(), "ping".into(), "timestamp".into(), "randomU32".into()]
     }
 
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
@@ -65,12 +65,12 @@ impl NativePlugin for CorePlugin {
 pub struct AppPlugin;
 
 impl NativePlugin for AppPlugin {
-    fn id(&self) -> &'static str {
-        "app"
+    fn id(&self) -> String {
+        "app".to_string()
     }
 
-    fn methods(&self) -> &'static [&'static str] {
-        &["version", "platform"]
+    fn methods(&self) -> Vec<String> {
+        vec!["version".into(), "platform".into()]
     }
 
     fn invoke(&self, method: &str, _payload: &Value) -> Result<Value, String> {
@@ -100,12 +100,12 @@ impl NativePlugin for AppPlugin {
 pub struct StatsPlugin;
 
 impl NativePlugin for StatsPlugin {
-    fn id(&self) -> &'static str {
-        "stats"
+    fn id(&self) -> String {
+        "stats".to_string()
     }
 
-    fn methods(&self) -> &'static [&'static str] {
-        &["analyze", "tokenize"]
+    fn methods(&self) -> Vec<String> {
+        vec!["analyze".into(), "tokenize".into()]
     }
 
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
