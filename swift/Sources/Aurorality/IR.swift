@@ -51,6 +51,7 @@ public struct ViewNode: Codable, Equatable {
 // MARK: - ViewStyle
 
 public struct ViewStyle: Codable, Equatable {
+    // ── Spacing ────────────────────────────────────────────
     public var padding: Float?
     public var paddingHorizontal: Float?
     public var paddingVertical: Float?
@@ -65,15 +66,77 @@ public struct ViewStyle: Codable, Equatable {
     public var marginBottom: Float?
     public var marginLeft: Float?
     public var marginRight: Float?
+
+    // ── Sizing ─────────────────────────────────────────────
+    // Sentinels: -1.0 = fill parent (.infinity), -2.0 = fit content (.fixedSize)
+    public var width: Float?
+    public var height: Float?
+    public var minWidth: Float?
+    public var maxWidth: Float?
+    public var minHeight: Float?
+    public var maxHeight: Float?
+    public var widthFraction: Float?   // 0.0–1.0 relative to parent
+    public var heightFraction: Float?
+    public var aspectRatio: Float?
+
+    // ── Typography ─────────────────────────────────────────
     public var fontSize: Float?
-    public var fontWeight: UInt16?
-    public var textAlign: String?
+    public var fontWeight: UInt16?     // CSS 100–900
+    public var fontFamily: String?     // "mono" | "serif" | "sans" (default)
+    public var textAlign: String?      // "left" | "center" | "right"
+    public var lineHeight: Float?      // multiplier, e.g. 1.5
+    public var letterSpacing: Float?   // points
+    public var textTransform: String?  // "uppercase" | "lowercase" | "capitalize"
     public var foregroundColor: String?
     public var backgroundColor: String?
     public var cornerRadius: Float?
     public var italic: Bool?
     public var underline: Bool?
     public var strikethrough: Bool?
+
+    // ── Border ─────────────────────────────────────────────
+    public var borderWidth: Float?
+    public var borderColor: String?
+
+    // ── Visibility & Opacity ───────────────────────────────
+    public var opacity: Float?         // 0.0–1.0
+    public var hidden: Bool?
+    public var overflowHidden: Bool?
+
+    // ── Flex / Layout ──────────────────────────────────────
+    public var flexDirection: String?  // "row" | "column"
+    public var flexGrow: Float?        // ≥ 1.0 → expand along primary axis
+    public var flexShrink: Float?
+    public var flexWrap: String?       // "wrap" | "nowrap"
+    public var alignSelf: String?      // "start" | "end" | "center" | "stretch"
+
+    // ── Position & Layering ───────────────────────────────
+    public var position: String?       // "absolute" | "relative" | "fixed"
+    public var zIndex: Int?
+    public var top: Float?
+    public var right: Float?
+    public var bottom: Float?
+    public var left: Float?
+
+    // ── Transform ─────────────────────────────────────────
+    public var translateX: Float?
+    public var translateY: Float?
+    public var scaleX: Float?
+    public var scaleY: Float?
+    public var rotate: Float?          // degrees
+
+    // ── Shadow ────────────────────────────────────────────
+    public var shadowColor: String?
+    public var shadowRadius: Float?
+    public var shadowOffsetX: Float?
+    public var shadowOffsetY: Float?
+
+    // ── Text Layout ───────────────────────────────────────
+    public var textOverflow: String?   // "clip" | "ellipsis" | "truncate"
+    public var whiteSpace: String?     // "normal" | "nowrap" | "pre" | "pre-wrap"
+    public var lineClamp: Int?
+    public var cursor: String?         // macOS only; ignored on iOS
+    public var userSelect: String?     // not supported in pure SwiftUI; ignored
 }
 
 // MARK: - Hot-reload protocol
@@ -113,120 +176,18 @@ public struct IrMutation: Codable {
 // MARK: - Mutation application
 
 extension ViewIr {
-    /// Apply a patch in-place. Returns new IR or self on unknown ops.
+    /// Apply a patch sequence in-place via the Rust mutation engine.
+    /// Falls back to `self` on encoding errors (should not happen in practice).
     public func applying(_ mutations: [IrMutation]) -> ViewIr {
-        var copy = self
-        for m in mutations {
-            copy = copy.applying(m)
-        }
-        return copy
+        guard !mutations.isEmpty else { return self }
+        guard
+            let irData  = try? JSONEncoder().encode(self),
+            let irJson  = String(data: irData, encoding: .utf8),
+            let mutData = try? JSONEncoder().encode(mutations),
+            let mutJson = String(data: mutData, encoding: .utf8),
+            let result  = try? applyMutations(irJson: irJson, mutationsJson: mutJson),
+            let newIr   = try? JSONDecoder().decode(ViewIr.self, from: Data(result.utf8))
+        else { return self }
+        return newIr
     }
-
-    private func applying(_ m: IrMutation) -> ViewIr {
-        switch m.op {
-        case .replaceRoot:
-            return ViewIr(version: version, root: m.root ?? [])
-        case .replaceNode:
-            guard let path = m.path, let node = m.node else { return self }
-            var newRoot = root
-            replaceNode(in: &newRoot, at: path, with: node)
-            return ViewIr(version: version, root: newRoot)
-        case .insertNode:
-            guard let parentPath = m.parentPath, let idx = m.index, let node = m.node else { return self }
-            var newRoot = root
-            insertNode(in: &newRoot, parentPath: parentPath, at: idx, node: node)
-            return ViewIr(version: version, root: newRoot)
-        case .removeNode:
-            guard let path = m.path, !path.isEmpty else { return self }
-            var newRoot = root
-            removeNode(in: &newRoot, at: path)
-            return ViewIr(version: version, root: newRoot)
-        case .updateText:
-            guard let path = m.path, let content = m.content else { return self }
-            var newRoot = root
-            updateText(in: &newRoot, at: path, content: content)
-            return ViewIr(version: version, root: newRoot)
-        case .updateStyle:
-            guard let path = m.path else { return self }
-            var newRoot = root
-            updateStyle(in: &newRoot, at: path, style: m.style)
-            return ViewIr(version: version, root: newRoot)
-        }
-    }
-}
-
-// MARK: - Path-based tree helpers
-
-private func nodeAt(_ nodes: [ViewNode], path: [Int]) -> ViewNode? {
-    guard let first = path.first else { return nil }
-    guard first < nodes.count else { return nil }
-    let node = nodes[first]
-    if path.count == 1 { return node }
-    return nodeAt(node.children ?? [], path: Array(path.dropFirst()))
-}
-
-private func replaceNode(in nodes: inout [ViewNode], at path: [Int], with replacement: ViewNode) {
-    guard let first = path.first, first < nodes.count else { return }
-    if path.count == 1 {
-        nodes[first] = replacement
-    } else {
-        var child = nodes[first]
-        var children = child.children ?? []
-        replaceNode(in: &children, at: Array(path.dropFirst()), with: replacement)
-        child.children = children
-        nodes[first] = child
-    }
-}
-
-private func insertNode(in nodes: inout [ViewNode], parentPath: [Int], at idx: Int, node: ViewNode) {
-    if parentPath.isEmpty {
-        let safeIdx = min(idx, nodes.count)
-        nodes.insert(node, at: safeIdx)
-        return
-    }
-    guard let first = parentPath.first, first < nodes.count else { return }
-    var parent = nodes[first]
-    var children = parent.children ?? []
-    insertNode(in: &children, parentPath: Array(parentPath.dropFirst()), at: idx, node: node)
-    parent.children = children
-    nodes[first] = parent
-}
-
-private func removeNode(in nodes: inout [ViewNode], at path: [Int]) {
-    guard let first = path.first, first < nodes.count else { return }
-    if path.count == 1 {
-        nodes.remove(at: first)
-        return
-    }
-    var parent = nodes[first]
-    var children = parent.children ?? []
-    removeNode(in: &children, at: Array(path.dropFirst()))
-    parent.children = children
-    nodes[first] = parent
-}
-
-private func updateText(in nodes: inout [ViewNode], at path: [Int], content: String) {
-    guard let first = path.first, first < nodes.count else { return }
-    if path.count == 1 {
-        nodes[first].content = content
-        return
-    }
-    var parent = nodes[first]
-    var children = parent.children ?? []
-    updateText(in: &children, at: Array(path.dropFirst()), content: content)
-    parent.children = children
-    nodes[first] = parent
-}
-
-private func updateStyle(in nodes: inout [ViewNode], at path: [Int], style: ViewStyle?) {
-    guard let first = path.first, first < nodes.count else { return }
-    if path.count == 1 {
-        nodes[first].style = style
-        return
-    }
-    var parent = nodes[first]
-    var children = parent.children ?? []
-    updateStyle(in: &children, at: Array(path.dropFirst()), style: style)
-    parent.children = children
-    nodes[first] = parent
 }

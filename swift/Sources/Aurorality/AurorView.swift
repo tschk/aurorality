@@ -55,13 +55,10 @@ struct AurorNodeView: View {
     }
 
     private var transformedContent: String {
-        let raw = node.content ?? ""
-        switch node.style?.textTransform {
-        case "uppercase":  return raw.uppercased()
-        case "lowercase":  return raw.lowercased()
-        case "capitalize": return raw.capitalized
-        default:           return raw
-        }
+        transformText(
+            content: node.content ?? "",
+            transform: node.style?.textTransform ?? ""
+        )
     }
 
     // MARK: stack
@@ -226,7 +223,7 @@ struct AurorTextStyleModifier: ViewModifier {
     let style: ViewStyle?
 
     func body(content: Content) -> some View {
-        content
+        let processed = content
             .font(style?.swiftFont)
             .foregroundStyle(style?.swiftForegroundColor ?? Color.primary)
             .italic(style?.italic == true)
@@ -235,6 +232,17 @@ struct AurorTextStyleModifier: ViewModifier {
             .multilineTextAlignment(style?.swiftTextAlignment ?? .leading)
             .lineSpacing(style?.swiftLineSpacing ?? 0)
             .kerning(style?.letterSpacing.map(CGFloat.init) ?? 0)
+            .lineLimit(style?.lineClamp)
+
+        // white-space handling
+        switch style?.whiteSpace {
+        case "nowrap":
+            return AnyView(processed.allowTightening(false).fixedSize(horizontal: true, vertical: false))
+        case "pre", "pre-wrap":
+            return AnyView(processed.environment(\.lineBreakMode, .byClipping))
+        default:
+            return AnyView(processed)
+        }
     }
 }
 
@@ -281,6 +289,10 @@ struct AurorLayoutModifier: ViewModifier {
             .auroraOverflowClip(style)
             .auroraFlexGrow(style)
             .auroraAlignSelf(style)
+            .auroraPosition(style)
+            .auroraTransform(style)
+            .auroraShadow(style)
+            .auroraTextOverflow(style)
     }
 }
 
@@ -373,6 +385,83 @@ private extension View {
         default:        self
         }
     }
+
+    /// Position & layering: absolute, relative, fixed
+    @ViewBuilder
+    func auroraPosition(_ style: ViewStyle?) -> some View {
+        var view = self
+        // Handle z-index first (applies to all positions)
+        if let z = style?.zIndex {
+            view = AnyView(view.zIndex(Double(z)))
+        }
+        guard let pos = style?.position else { return AnyView(view) }
+        switch pos {
+        case "absolute", "fixed":
+            // For absolute positioning, wrap in a ZStack with offsets
+            if let t = style?.top, let l = style?.left {
+                return AnyView(view.offset(x: CGFloat(l), y: CGFloat(t)))
+            } else if let t = style?.top {
+                return AnyView(view.offset(y: CGFloat(t)))
+            } else if let l = style?.left {
+                return AnyView(view.offset(x: CGFloat(l)))
+            }
+            return AnyView(view)
+        default:
+            return AnyView(view)
+        }
+    }
+
+    /// Transform: translate, scale, rotate
+    @ViewBuilder
+    func auroraTransform(_ style: ViewStyle?) -> some View {
+        var view = self
+        if let tx = style?.translateX {
+            view = AnyView(view.offset(x: CGFloat(tx)))
+        }
+        if let ty = style?.translateY {
+            view = AnyView(view.offset(y: CGFloat(ty)))
+        }
+        if let sx = style?.scaleX, let sy = style?.scaleY {
+            view = AnyView(view.scaleEffect(CGSize(width: CGFloat(sx), height: CGFloat(sy))))
+        } else if let sx = style?.scaleX {
+            view = AnyView(view.scaleEffect(CGFloat(sx)))
+        } else if let sy = style?.scaleY {
+            view = AnyView(view.scaleEffect(CGFloat(sy)))
+        }
+        if let rot = style?.rotate {
+            view = AnyView(view.rotationEffect(.degrees(Double(rot))))
+        }
+        return AnyView(view)
+    }
+
+    /// Shadow
+    @ViewBuilder
+    func auroraShadow(_ style: ViewStyle?) -> some View {
+        guard let shadowColor = style?.shadowColor,
+              let swiftColor = Color(cssString: shadowColor) else {
+            return AnyView(self)
+        }
+        let radius = CGFloat(style?.shadowRadius ?? 4.0)
+        let offsetX = CGFloat(style?.shadowOffsetX ?? 0)
+        let offsetY = CGFloat(style?.shadowOffsetY ?? 2)
+        return AnyView(self.shadow(color: swiftColor, radius: radius, x: offsetX, y: offsetY))
+    }
+
+    /// Text overflow
+    @ViewBuilder
+    func auroraTextOverflow(_ style: ViewStyle?) -> some View {
+        guard let overflow = style?.textOverflow else { return AnyView(self) }
+        switch overflow {
+        case "truncate":
+            return AnyView(self.lineLimit(1).truncationMode(.tail))
+        case "ellipsis":
+            return AnyView(self.lineLimit(nil).truncationMode(.tail))
+        case "clip":
+            return AnyView(self.clipped())
+        default:
+            return AnyView(self)
+        }
+    }
 }
 
 private func absValue(_ v: Float?) -> CGFloat? {
@@ -458,49 +547,17 @@ extension ViewStyle {
 // MARK: - Color from CSS string
 
 extension Color {
-    /// Tailwind hex strings (#rrggbb or #rrggbbaa) + basic named colors.
+    /// Resolve a CSS color string via the Rust color parser.
+    /// Handles hex (#rrggbb / #rrggbbaa) and named colors.
+    /// Falls back to `Color.primary` / `Color.secondary` for semantic names,
+    /// and returns `nil` for unrecognised strings.
     init?(cssString: String) {
         switch cssString.lowercased() {
-        case "red":               self = .red
-        case "blue":              self = .blue
-        case "green":             self = .green
-        case "white":             self = .white
-        case "black":             self = .black
-        case "gray", "grey":      self = .gray
-        case "clear", "transparent": self = .clear
-        case "orange":            self = .orange
-        case "yellow":            self = .yellow
-        case "purple":            self = .purple
-        case "pink":              self = .pink
-        case "primary":           self = .primary
-        case "secondary":         self = .secondary
-        default:
-            if cssString.hasPrefix("#") {
-                self.init(hex: cssString)
-            } else {
-                return nil
-            }
+        case "primary":   self = .primary;   return
+        case "secondary": self = .secondary; return
+        default: break
         }
-    }
-
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
-        let r, g, b, a: Double
-        if hex.count == 6 {
-            let n = UInt64(hex, radix: 16) ?? 0
-            r = Double((n >> 16) & 0xFF) / 255
-            g = Double((n >> 8)  & 0xFF) / 255
-            b = Double(n         & 0xFF) / 255
-            a = 1
-        } else if hex.count == 8 {
-            let n = UInt64(hex, radix: 16) ?? 0
-            r = Double((n >> 24) & 0xFF) / 255
-            g = Double((n >> 16) & 0xFF) / 255
-            b = Double((n >> 8)  & 0xFF) / 255
-            a = Double(n         & 0xFF) / 255
-        } else {
-            r = 0; g = 0; b = 0; a = 1
-        }
-        self.init(red: r, green: g, blue: b, opacity: a)
+        guard let c = resolveColor(css: cssString) else { return nil }
+        self.init(red: Double(c.r), green: Double(c.g), blue: Double(c.b), opacity: Double(c.a))
     }
 }
