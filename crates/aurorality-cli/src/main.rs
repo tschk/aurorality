@@ -1,5 +1,7 @@
 //! `aurorality` CLI — dev server, build, and project scaffolding.
 
+mod bindgen;
+mod bundle;
 mod dev_server;
 mod scaffold;
 
@@ -51,6 +53,35 @@ enum Commands {
         /// Name of the new project.
         name: String,
     },
+
+    /// Bundle JS (via bun/esbuild) + compile .crepus templates to IR JSON.
+    Bundle {
+        /// Directory of .crepus views to compile.
+        #[arg(long, default_value = "views")]
+        views: PathBuf,
+        /// Output directory for compiled IR JSON files.
+        #[arg(long, default_value = "generated/ir")]
+        out: PathBuf,
+        /// JS entry point to bundle (optional).
+        #[arg(long)]
+        js_entry: Option<PathBuf>,
+        /// Output path for the bundled JS file.
+        #[arg(long, default_value = "bundle/main.js")]
+        js_out: PathBuf,
+        /// JS bundler to use: "bun" or "esbuild".
+        #[arg(long, default_value = "bun")]
+        bundler: String,
+    },
+
+    /// Generate typed Swift wrappers from JS plugin export signatures.
+    Bindgen {
+        /// Directory of .js plugin files to scan.
+        #[arg(short, long, default_value = "plugins")]
+        input: PathBuf,
+        /// Output directory for generated Swift files.
+        #[arg(short, long, default_value = "generated")]
+        output: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -67,6 +98,18 @@ async fn main() -> Result<()> {
         Commands::New { name } => {
             scaffold::new_project(&name)?;
         }
+        Commands::Bundle { views, out, js_entry, js_out, bundler } => {
+            bundle::run(bundle::BundleConfig {
+                views_dir: views,
+                ir_out: out,
+                js_entry,
+                js_out,
+                bundler,
+            })?;
+        }
+        Commands::Bindgen { input, output } => {
+            bindgen::run(&input, &output)?;
+        }
     }
 
     Ok(())
@@ -82,7 +125,7 @@ fn build_all(views_dir: &PathBuf, out_dir: &PathBuf) -> Result<()> {
     let mut count = 0;
     for entry in std::fs::read_dir(views_dir)?.flatten() {
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "crepus") {
+        if path.extension().is_some_and(|e| e == "crepus") {
             let content = std::fs::read_to_string(&path)?;
             let ir = render_template_to_ir(&content, &ctx).map_err(|e| {
                 anyhow::anyhow!("failed to render {}: {e}", path.display())

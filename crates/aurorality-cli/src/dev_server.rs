@@ -99,7 +99,7 @@ async fn handle_connection(
 
     // Send current state immediately on connect.
     if let Some(snapshot) = initial {
-        let _ = sink.send(Message::Text(snapshot.into())).await;
+        let _ = sink.send(Message::Text(snapshot)).await;
     }
 
     loop {
@@ -107,7 +107,7 @@ async fn handle_connection(
             msg = rx.recv() => {
                 match msg {
                     Ok(json) => {
-                        if sink.send(Message::Text(json.into())).await.is_err() {
+                        if sink.send(Message::Text(json)).await.is_err() {
                             break;
                         }
                     }
@@ -196,7 +196,7 @@ fn load_all_crepus(dir: &Path) -> HashMap<PathBuf, String> {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "crepus") {
+        if path.extension().is_some_and(|e| e == "crepus") {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 map.insert(path, content);
             }
