@@ -5,7 +5,7 @@ A SwiftUI + Rust shell for `.crepus` templates — build native iOS/macOS apps w
 ## Overview
 
 Aurorality combines:
-- **`.crepus` templates** — Tailwind-inspired declarative syntax that compiles to SwiftUI
+- **`.crepus` templates** — Tailwind-inspired declarative syntax that compiles to SwiftUI. From [crepuscularity](https://github.com/semitechnological/crepuscularity).
 - **Rust rendering backend** — Parses templates + manages plugin logic via UniFFI
 - **SwiftUI renderer** — Reactive view tree from the IR with hot reload support
 
