@@ -1,0 +1,391 @@
+{
+  "version": 2,
+  "root": [
+    {
+      "kind": "stack",
+      "axis": "column",
+      "spacing": 16.0,
+      "style": {
+        "padding": 24.0,
+        "backgroundColor": "#09090b",
+        "flexDirection": "column"
+      },
+      "children": [
+        {
+          "kind": "stack",
+          "axis": "row",
+          "spacing": 16.0,
+          "style": {
+            "flexDirection": "row"
+          },
+          "children": [
+            {
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 12.0,
+              "style": {
+                "padding": 20.0,
+                "backgroundColor": "#18181b",
+                "cornerRadius": 6.0,
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "text",
+                  "content": "HYPERCHAT",
+                  "style": {
+                    "fontSize": 12.0,
+                    "fontWeight": 600,
+                    "foregroundColor": "#71717a"
+                  }
+                },
+                {
+                  "kind": "text",
+                  "content": "Service route",
+                  "style": {
+                    "fontSize": 30.0,
+                    "fontWeight": 700,
+                    "foregroundColor": "#f4f4f5"
+                  }
+                },
+                {
+                  "kind": "text",
+                  "content": "Matrix",
+                  "style": {
+                    "fontSize": 30.0,
+                    "fontWeight": 700,
+                    "foregroundColor": "#67e8f9"
+                  }
+                },
+                {
+                  "kind": "text",
+                  "content": "Federated room route",
+                  "style": {
+                    "fontSize": 14.0,
+                    "foregroundColor": "#a1a1aa"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 8.0,
+              "style": {
+                "padding": 20.0,
+                "backgroundColor": "#18181b",
+                "cornerRadius": 6.0,
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "text",
+                  "content": "SIGNALS",
+                  "style": {
+                    "fontSize": 12.0,
+                    "fontWeight": 600,
+                    "foregroundColor": "#71717a"
+                  }
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "confidence",
+                      "style": {
+                        "fontSize": 14.0,
+                        "foregroundColor": "#a1a1aa"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "78%",
+                      "style": {
+                        "fontSize": 18.0,
+                        "fontWeight": 700,
+                        "foregroundColor": "#67e8f9"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "messages",
+                      "style": {
+                        "fontSize": 14.0,
+                        "foregroundColor": "#a1a1aa"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "0",
+                      "style": {
+                        "fontSize": 18.0,
+                        "fontWeight": 700,
+                        "foregroundColor": "#f4f4f5"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "stack",
+          "axis": "row",
+          "spacing": 16.0,
+          "style": {
+            "flexDirection": "row"
+          },
+          "children": [
+            {
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 8.0,
+              "style": {
+                "padding": 20.0,
+                "backgroundColor": "#18181b",
+                "cornerRadius": 6.0,
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "text",
+                  "content": "SERVICES",
+                  "style": {
+                    "fontSize": 12.0,
+                    "fontWeight": 600,
+                    "foregroundColor": "#71717a"
+                  }
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "Matrix",
+                      "style": {
+                        "fontSize": 14.0,
+                        "fontWeight": 700,
+                        "foregroundColor": "#f4f4f5"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "federation",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#a1a1aa"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "configured by env",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#67e8f9"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "Stalwart Archive",
+                      "style": {
+                        "fontSize": 14.0,
+                        "fontWeight": 700,
+                        "foregroundColor": "#f4f4f5"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "archive",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#a1a1aa"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "local service",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#67e8f9"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 8.0,
+              "style": {
+                "padding": 20.0,
+                "backgroundColor": "#18181b",
+                "cornerRadius": 6.0,
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "text",
+                  "content": "ROUTE PLAN",
+                  "style": {
+                    "fontSize": 12.0,
+                    "fontWeight": 600,
+                    "foregroundColor": "#71717a"
+                  }
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "#1",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#71717a"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "matrix",
+                      "style": {
+                        "fontSize": 14.0,
+                        "fontWeight": 700
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "federated room",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#67e8f9"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 12.0,
+                  "style": {
+                    "padding": 12.0,
+                    "backgroundColor": "#27272a",
+                    "cornerRadius": 6.0,
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "#2",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#71717a"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "stalwart",
+                      "style": {
+                        "fontSize": 14.0,
+                        "fontWeight": 700
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "archive relay",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#67e8f9"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "stack",
+          "axis": "column",
+          "spacing": 8.0,
+          "style": {
+            "padding": 20.0,
+            "backgroundColor": "#18181b",
+            "cornerRadius": 6.0,
+            "flexDirection": "column"
+          },
+          "children": [
+            {
+              "kind": "text",
+              "content": "ACTIVITY",
+              "style": {
+                "fontSize": 12.0,
+                "fontWeight": 600,
+                "foregroundColor": "#71717a"
+              }
+            },
+            {
+              "kind": "text",
+              "content": "No messages yet",
+              "style": {
+                "fontSize": 14.0,
+                "foregroundColor": "#a1a1aa"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

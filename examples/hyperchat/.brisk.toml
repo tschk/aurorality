@@ -1,0 +1,26 @@
+[package]
+name = "AurorHyperChat"
+version = "0.1.0"
+
+[app]
+bundle_id = "dev.aurorality.example.hyperchat"
+deployment_target = "15.0"
+sources = ".brisk-sources"
+resources = ["views", "scripts"]
+linker_flags = ["-I.brisk-sources", "-L../../target/debug", "-laurorality_core", "-framework", "JavaScriptCore"]
+
+[pre_build]
+commands = [
+    "cargo build -p aurorality-core --features js --manifest-path ../../Cargo.toml",
+    "cargo run --manifest-path ../../Cargo.toml -p aurorality-core --features js --bin uniffi-bindgen generate --library ../../target/debug/libaurorality_core.dylib --language swift --out-dir ../../generated",
+    "cp ../../generated/aurorality_coreFFI.modulemap ../../generated/module.modulemap",
+    "rm -rf .brisk-sources",
+    "mkdir -p .brisk-sources",
+    "cp Sources/*.swift .brisk-sources/",
+    "cp ../../swift/Sources/Aurorality/*.swift .brisk-sources/",
+    "rm -f .brisk-sources/AuroralityCoreApi.swift",
+    "cp ../../generated/aurorality_core.swift .brisk-sources/",
+    "cp ../../generated/aurorality_coreFFI.h .brisk-sources/",
+    "cp ../../generated/aurorality_coreFFI.modulemap .brisk-sources/module.modulemap",
+    "aurorality build --watch views --out ../../generated/ir"
+]

@@ -1,0 +1,68 @@
+div flex flex-col gap-4 p-6 bg-zinc-950
+  div flex flex-row gap-4
+    div flex flex-col gap-3 p-5 rounded bg-zinc-900
+      span text-xs font-semibold text-zinc-500
+        "HYPERCHAT"
+      span text-3xl font-bold text-zinc-100
+        "Service route"
+      span text-3xl font-bold text-cyan-300
+        "Matrix"
+      span text-sm text-zinc-400
+        "Federated room route"
+
+    div flex flex-col gap-2 p-5 rounded bg-zinc-900
+      span text-xs font-semibold text-zinc-500
+        "SIGNALS"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-sm text-zinc-400
+          "confidence"
+        span text-lg font-bold text-cyan-300
+          "78%"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-sm text-zinc-400
+          "messages"
+        span text-lg font-bold text-zinc-100
+          "0"
+
+  div flex flex-row gap-4
+    div flex flex-col gap-2 p-5 rounded bg-zinc-900
+      span text-xs font-semibold text-zinc-500
+        "SERVICES"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-sm font-bold text-zinc-100
+          "Matrix"
+        span text-xs text-zinc-400
+          "federation"
+        span text-xs text-cyan-300
+          "configured by env"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-sm font-bold text-zinc-100
+          "Stalwart Archive"
+        span text-xs text-zinc-400
+          "archive"
+        span text-xs text-cyan-300
+          "local service"
+
+    div flex flex-col gap-2 p-5 rounded bg-zinc-900
+      span text-xs font-semibold text-zinc-500
+        "ROUTE PLAN"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-xs text-zinc-500
+          "#1"
+        span text-sm font-bold text-white
+          "matrix"
+        span text-xs text-cyan-300
+          "federated room"
+      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+        span text-xs text-zinc-500
+          "#2"
+        span text-sm font-bold text-white
+          "stalwart"
+        span text-xs text-cyan-300
+          "archive relay"
+
+  div flex flex-col gap-2 p-5 rounded bg-zinc-900
+    span text-xs font-semibold text-zinc-500
+      "ACTIVITY"
+    span text-sm text-zinc-400
+      "No messages yet"
