@@ -1,68 +1,75 @@
-div flex flex-col gap-4 p-6 bg-zinc-950
-  div flex flex-row gap-4
-    div flex flex-col gap-3 p-5 rounded bg-zinc-900
-      span text-xs font-semibold text-zinc-500
-        "HYPERCHAT"
-      span text-3xl font-bold text-zinc-100
-        "Service route"
-      span text-3xl font-bold text-cyan-300
-        "Matrix"
-      span text-sm text-zinc-400
-        "Federated room route"
+navigationsplitview
+  sidebar
+    section header="Conversations"
+      button button-bordered @click="newConversation"
+        hstack gap-1
+          sf-plus
+          span "New"
+      for conv in {conversations}
+        item @click="selectConversation:{conv.id}"
+          vstack gap-1 p-2
+            span text-sm font-semibold
+              "{conv.title}"
+            span text-xs text-zinc-500
+              "{conv.subtitle}"
+            span text-xs text-zinc-500
+              "{conv.protocolLabel}"
 
-    div flex flex-col gap-2 p-5 rounded bg-zinc-900
-      span text-xs font-semibold text-zinc-500
-        "SIGNALS"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
-        span text-sm text-zinc-400
-          "confidence"
-        span text-lg font-bold text-cyan-300
-          "78%"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
-        span text-sm text-zinc-400
-          "messages"
-        span text-lg font-bold text-zinc-100
-          "0"
-
-  div flex flex-row gap-4
-    div flex flex-col gap-2 p-5 rounded bg-zinc-900
-      span text-xs font-semibold text-zinc-500
-        "SERVICES"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
-        span text-sm font-bold text-zinc-100
-          "Matrix"
-        span text-xs text-zinc-400
-          "federation"
-        span text-xs text-cyan-300
-          "configured by env"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
-        span text-sm font-bold text-zinc-100
-          "Stalwart Archive"
-        span text-xs text-zinc-400
-          "archive"
-        span text-xs text-cyan-300
-          "local service"
-
-    div flex flex-col gap-2 p-5 rounded bg-zinc-900
-      span text-xs font-semibold text-zinc-500
-        "ROUTE PLAN"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+    section header="Protocols"
+      item
+        hstack gap-2
+          span text-xs text-zinc-500
+            "Transport status"
+          spacer
+          button button-bordered @click="refreshStatus"
+            "Refresh"
+      item
         span text-xs text-zinc-500
-          "#1"
-        span text-sm font-bold text-white
-          "matrix"
-        span text-xs text-cyan-300
-          "federated room"
-      div flex flex-row gap-3 p-3 rounded bg-zinc-800
+          "{matrixStatusLine}"
+      item
         span text-xs text-zinc-500
-          "#2"
-        span text-sm font-bold text-white
-          "stalwart"
-        span text-xs text-cyan-300
-          "archive relay"
+          "{stalwartStatusLine}"
 
-  div flex flex-col gap-2 p-5 rounded bg-zinc-900
-    span text-xs font-semibold text-zinc-500
-      "ACTIVITY"
-    span text-sm text-zinc-400
-      "No messages yet"
+  detail
+    vstack gap-0 flex-grow
+      vstack gap-1 p-3 border-b border-zinc-200
+        span text-sm font-semibold
+          "{recipientTitle}"
+        span text-xs text-zinc-500
+          "{protocolSummary}"
+
+      scrollview flex flex-col gap-2 p-4 flex-grow
+        if newConversationPrompt
+          vstack gap-1 p-3 rounded bg-zinc-100
+            span text-sm
+              "Pick Matrix or Stalwart below to start messaging."
+        for m in {messages}
+          if m.isOutgoing
+            hstack gap-2
+              spacer
+              vstack gap-1 p-3 rounded bg-blue-700
+                span text-sm text-white
+                  "{m.body}"
+                span text-xs text-white
+                  "{m.metaLine}"
+          else
+            hstack gap-2
+              vstack gap-1 p-3 rounded bg-zinc-100
+                span text-sm
+                  "{m.body}"
+                span text-xs text-zinc-500
+                  "{m.metaLine}"
+              spacer
+
+      vstack gap-2 p-3 border-t border-zinc-200
+        picker bind=selectedProtocol
+          span value="matrix" "Matrix"
+          span value="stalwart" "Stalwart"
+          span value="bitchat" "Bitchat"
+        if bitchatSendBlocked
+          span text-xs text-zinc-500
+            "Bitchat is view-only in this build."
+        hstack gap-2
+          textfield flex rounded border border-zinc-300 p-2 bind=draft placeholder="iMessage"
+          button button-prominent @click="send"
+            "Send"
