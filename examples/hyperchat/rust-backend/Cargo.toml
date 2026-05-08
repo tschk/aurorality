@@ -1,0 +1,23 @@
+[package]
+name = "hyperchat-backend"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "HyperChat transport FFI — Matrix, Stalwart, Bitchat status (eqswift + UniFFI)"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "hyperchat_backend"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+eqswift = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uniffi = { workspace = true }
+ureq = { workspace = true }
+base64 = "0.22"

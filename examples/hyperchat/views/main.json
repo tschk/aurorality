@@ -3,84 +3,56 @@
   "root": [
     {
       "kind": "stack",
-      "axis": "column",
-      "spacing": 16.0,
+      "axis": "row",
+      "spacing": 0.0,
       "style": {
-        "padding": 24.0,
-        "backgroundColor": "#09090b",
-        "flexDirection": "column"
+        "backgroundColor": "#f4f4f5",
+        "flexDirection": "row"
       },
       "children": [
         {
           "kind": "stack",
-          "axis": "row",
-          "spacing": 16.0,
+          "axis": "column",
+          "spacing": 8.0,
           "style": {
-            "flexDirection": "row"
+            "padding": 12.0,
+            "width": 288.0,
+            "backgroundColor": "#e4e4e7",
+            "flexDirection": "column"
           },
           "children": [
             {
+              "kind": "text",
+              "content": "Messages",
+              "style": {
+                "fontSize": 20.0,
+                "fontWeight": 700,
+                "foregroundColor": "#09090b"
+              }
+            },
+            {
               "kind": "stack",
               "axis": "column",
-              "spacing": 12.0,
-              "style": {
-                "padding": 20.0,
-                "backgroundColor": "#18181b",
-                "cornerRadius": 6.0,
-                "flexDirection": "column"
-              },
-              "children": [
-                {
-                  "kind": "text",
-                  "content": "HYPERCHAT",
-                  "style": {
-                    "fontSize": 12.0,
-                    "fontWeight": 600,
-                    "foregroundColor": "#71717a"
-                  }
-                },
-                {
-                  "kind": "text",
-                  "content": "Service route",
-                  "style": {
-                    "fontSize": 30.0,
-                    "fontWeight": 700,
-                    "foregroundColor": "#f4f4f5"
-                  }
-                },
-                {
-                  "kind": "text",
-                  "content": "Matrix",
-                  "style": {
-                    "fontSize": 30.0,
-                    "fontWeight": 700,
-                    "foregroundColor": "#67e8f9"
-                  }
-                },
-                {
-                  "kind": "text",
-                  "content": "Federated room route",
-                  "style": {
-                    "fontSize": 14.0,
-                    "foregroundColor": "#a1a1aa"
-                  }
-                }
-              ]
+              "children": []
+            },
+            {
+              "kind": "stack",
+              "axis": "column",
+              "children": []
             },
             {
               "kind": "stack",
               "axis": "column",
               "spacing": 8.0,
               "style": {
-                "padding": 20.0,
-                "backgroundColor": "#18181b",
+                "padding": 12.0,
                 "cornerRadius": 6.0,
                 "flexDirection": "column"
               },
               "children": [
                 {
                   "kind": "text",
-                  "content": "SIGNALS",
+                  "content": "Transport",
                   "style": {
                     "fontSize": 12.0,
                     "fontWeight": 600,
@@ -88,268 +60,28 @@
                   }
                 },
                 {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
-                  "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "confidence",
-                      "style": {
-                        "fontSize": 14.0,
-                        "foregroundColor": "#a1a1aa"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "78%",
-                      "style": {
-                        "fontSize": 18.0,
-                        "fontWeight": 700,
-                        "foregroundColor": "#67e8f9"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
-                  "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "messages",
-                      "style": {
-                        "fontSize": 14.0,
-                        "foregroundColor": "#a1a1aa"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "0",
-                      "style": {
-                        "fontSize": 18.0,
-                        "fontWeight": 700,
-                        "foregroundColor": "#f4f4f5"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "kind": "stack",
-          "axis": "row",
-          "spacing": 16.0,
-          "style": {
-            "flexDirection": "row"
-          },
-          "children": [
-            {
-              "kind": "stack",
-              "axis": "column",
-              "spacing": 8.0,
-              "style": {
-                "padding": 20.0,
-                "backgroundColor": "#18181b",
-                "cornerRadius": 6.0,
-                "flexDirection": "column"
-              },
-              "children": [
-                {
                   "kind": "text",
-                  "content": "SERVICES",
+                  "content": "",
                   "style": {
                     "fontSize": 12.0,
-                    "fontWeight": 600,
-                    "foregroundColor": "#71717a"
+                    "foregroundColor": "#52525b"
                   }
                 },
                 {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
-                  "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "Matrix",
-                      "style": {
-                        "fontSize": 14.0,
-                        "fontWeight": 700,
-                        "foregroundColor": "#f4f4f5"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "federation",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#a1a1aa"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "configured by env",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#67e8f9"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
-                  "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "Stalwart Archive",
-                      "style": {
-                        "fontSize": 14.0,
-                        "fontWeight": 700,
-                        "foregroundColor": "#f4f4f5"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "archive",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#a1a1aa"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "local service",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#67e8f9"
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "kind": "stack",
-              "axis": "column",
-              "spacing": 8.0,
-              "style": {
-                "padding": 20.0,
-                "backgroundColor": "#18181b",
-                "cornerRadius": 6.0,
-                "flexDirection": "column"
-              },
-              "children": [
-                {
                   "kind": "text",
-                  "content": "ROUTE PLAN",
+                  "content": "",
                   "style": {
                     "fontSize": 12.0,
-                    "fontWeight": 600,
-                    "foregroundColor": "#71717a"
+                    "foregroundColor": "#52525b"
                   }
                 },
                 {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
+                  "kind": "text",
+                  "content": "",
                   "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "#1",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#71717a"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "matrix",
-                      "style": {
-                        "fontSize": 14.0,
-                        "fontWeight": 700
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "federated room",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#67e8f9"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "kind": "stack",
-                  "axis": "row",
-                  "spacing": 12.0,
-                  "style": {
-                    "padding": 12.0,
-                    "backgroundColor": "#27272a",
-                    "cornerRadius": 6.0,
-                    "flexDirection": "row"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "content": "#2",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#71717a"
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "stalwart",
-                      "style": {
-                        "fontSize": 14.0,
-                        "fontWeight": 700
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "content": "archive relay",
-                      "style": {
-                        "fontSize": 12.0,
-                        "foregroundColor": "#67e8f9"
-                      }
-                    }
-                  ]
+                    "fontSize": 12.0,
+                    "foregroundColor": "#52525b"
+                  }
                 }
               ]
             }
@@ -358,30 +90,186 @@
         {
           "kind": "stack",
           "axis": "column",
-          "spacing": 8.0,
+          "spacing": 0.0,
           "style": {
-            "padding": 20.0,
-            "backgroundColor": "#18181b",
-            "cornerRadius": 6.0,
+            "flexGrow": 1.0,
             "flexDirection": "column"
           },
           "children": [
             {
-              "kind": "text",
-              "content": "ACTIVITY",
+              "kind": "stack",
+              "axis": "row",
+              "spacing": 16.0,
               "style": {
-                "fontSize": 12.0,
-                "fontWeight": 600,
-                "foregroundColor": "#71717a"
-              }
+                "padding": 16.0,
+                "borderColor": "#e4e4e7",
+                "flexDirection": "row"
+              },
+              "children": [
+                {
+                  "kind": "stack",
+                  "axis": "column",
+                  "spacing": 4.0,
+                  "style": {
+                    "flexDirection": "column"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "To",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#71717a"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "",
+                      "style": {
+                        "fontSize": 18.0,
+                        "fontWeight": 600,
+                        "foregroundColor": "#09090b"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "stack",
+                  "axis": "column",
+                  "spacing": 4.0,
+                  "style": {
+                    "flexDirection": "column"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "Protocol",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#71717a"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "",
+                      "style": {
+                        "fontSize": 14.0,
+                        "fontWeight": 600,
+                        "foregroundColor": "#1d4ed8"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "stack",
+                  "axis": "column",
+                  "spacing": 4.0,
+                  "style": {
+                    "flexDirection": "column"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "content": "Summary",
+                      "style": {
+                        "fontSize": 12.0,
+                        "foregroundColor": "#71717a"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "content": "",
+                      "style": {
+                        "fontSize": 14.0,
+                        "foregroundColor": "#3f3f46"
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             {
-              "kind": "text",
-              "content": "No messages yet",
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 8.0,
               "style": {
-                "fontSize": 14.0,
-                "foregroundColor": "#a1a1aa"
-              }
+                "padding": 16.0,
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "stack",
+                  "axis": "column",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "kind": "stack",
+              "axis": "column",
+              "spacing": 12.0,
+              "style": {
+                "padding": 16.0,
+                "backgroundColor": "#fafafa",
+                "borderColor": "#e4e4e7",
+                "flexDirection": "column"
+              },
+              "children": [
+                {
+                  "kind": "text",
+                  "content": "Compose — pick transport then send",
+                  "style": {
+                    "fontSize": 12.0,
+                    "fontWeight": 600,
+                    "foregroundColor": "#71717a"
+                  }
+                },
+                {
+                  "kind": "picker",
+                  "bind": "\"selectedProtocol\"",
+                  "options": [
+                    {
+                      "value": "matrix",
+                      "label": "Matrix"
+                    },
+                    {
+                      "value": "stalwart",
+                      "label": "Stalwart"
+                    },
+                    {
+                      "value": "bitchat",
+                      "label": "Bitchat"
+                    }
+                  ]
+                },
+                {
+                  "kind": "input",
+                  "placeholder": "Message",
+                  "bind": "\"draft\"",
+                  "multiline": false,
+                  "style": {
+                    "padding": 8.0,
+                    "cornerRadius": 6.0,
+                    "borderWidth": 1.0,
+                    "borderColor": "#d4d4d8"
+                  }
+                },
+                {
+                  "kind": "stack",
+                  "axis": "row",
+                  "spacing": 8.0,
+                  "style": {
+                    "flexDirection": "row"
+                  },
+                  "children": [
+                    {
+                      "kind": "button",
+                      "label": "Send",
+                      "on_click": "send"
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }

@@ -536,42 +536,43 @@ void ffi_aurorality_core_rust_future_complete_void(uint64_t handle, RustCallStat
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_APPLY_MUTATIONS
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_APPLY_MUTATIONS
 uint16_t uniffi_aurorality_core_checksum_func_apply_mutations(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_JS_LOAD_PLUGIN
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_JS_LOAD_PLUGIN
 uint16_t uniffi_aurorality_core_checksum_func_js_load_plugin(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_PLUGIN_INVOKE
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_PLUGIN_INVOKE
 uint16_t uniffi_aurorality_core_checksum_func_plugin_invoke(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_RENDER_TEMPLATE
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_RENDER_TEMPLATE
 uint16_t uniffi_aurorality_core_checksum_func_render_template(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_RESOLVE_COLOR
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_RESOLVE_COLOR
 uint16_t uniffi_aurorality_core_checksum_func_resolve_color(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_TRANSFORM_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_AURORALITY_CORE_CHECKSUM_FUNC_TRANSFORM_TEXT
 uint16_t uniffi_aurorality_core_checksum_func_transform_text(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_AURORALITY_CORE_UNIFFI_CONTRACT_VERSION
 #define UNIFFI_FFIDEF_FFI_AURORALITY_CORE_UNIFFI_CONTRACT_VERSION
 uint32_t ffi_aurorality_core_uniffi_contract_version(void
-
+    
 );
 #endif
+

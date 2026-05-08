@@ -1,0 +1,7 @@
+module hyperchat_backendFFI {
+    header "hyperchat_backendFFI.h"
+    export *
+    use "Darwin"
+    use "_Builtin_stdbool"
+    use "_Builtin_stdint"
+}

@@ -9,15 +9,17 @@ struct HyperChatGeneratedView: View {
         NavigationSplitView {
             List {
                 Section {
-                    Button {
-                        eventSink("newConversation")
-                    } label: {
-                            HStack(alignment: .top, spacing: 4) {
-                                Image(systemName: "plus")
-                                Text("New")
+                    HStack(alignment: .top, spacing: 8) {
+                            Button {
+                                eventSink("newConversation")
+                            } label: {
+                                    HStack(alignment: .top, spacing: 4) {
+                                        Image(systemName: "plus")
+                                        Text("New")
+                                    }
                             }
-                    }
             .buttonStyle(.bordered)
+                    }
                     ForEach(Array(context.conversations.enumerated()), id: \.offset) { _, conv in
                             Button {
                                 eventSink("selectConversation:\(conv.id)")
@@ -29,21 +31,18 @@ struct HyperChatGeneratedView: View {
                                         Text(String(describing: conv.subtitle))
             .font(.caption)
             .foregroundStyle(Color.secondary)
-                                        Text(String(describing: conv.protocolLabel))
-            .font(.caption)
-            .foregroundStyle(Color.secondary)
                                     }
             .padding(8)
                             }
                             .buttonStyle(.plain)
                         }
                 } header: {
-                    Text("Conversations")
+                    Text("Messages")
                 }
                 Section {
                     HStack(alignment: .top, spacing: 8) {
                             HStack(alignment: .top, spacing: 8) {
-                                Text("Transport status")
+                                Text("Status")
             .font(.caption)
             .foregroundStyle(Color.secondary)
                                 Spacer()
@@ -65,6 +64,11 @@ struct HyperChatGeneratedView: View {
             .font(.caption)
             .foregroundStyle(Color.secondary)
                     }
+                    HStack(alignment: .top, spacing: 8) {
+                            Text(String(describing: context.bitchatStatusLine))
+            .font(.caption)
+            .foregroundStyle(Color.secondary)
+                    }
                 } header: {
                     Text("Protocols")
                 }
@@ -72,13 +76,17 @@ struct HyperChatGeneratedView: View {
             .listStyle(.sidebar)
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(String(describing: context.recipientTitle))
+                HStack(alignment: .top, spacing: 0) {
+                    Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(describing: context.recipientTitle))
             .font(.callout)
             .fontWeight(.semibold)
-                    Text(String(describing: context.protocolSummary))
+                        Text(String(describing: context.protocolSummary))
             .font(.caption)
             .foregroundStyle(Color.secondary)
+                    }
+                    Spacer()
                 }
             .padding(12)
             .overlay(alignment: .bottom) {
@@ -87,21 +95,25 @@ struct HyperChatGeneratedView: View {
                     .frame(height: 1)
             }
                 ScrollView {
-VStack(alignment: .leading, spacing: 8) {
+VStack(alignment: .leading, spacing: 12) {
                         if context.newConversationPrompt {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Pick Matrix or Stalwart below to start messaging.")
+                            HStack(alignment: .top, spacing: 0) {
+                                Spacer()
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Pick Matrix or Stalwart below to start messaging.")
             .font(.callout)
-                            }
+                                }
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(nsColor: .underPageBackgroundColor)))
+                                Spacer()
+                            }
                         } else {
                             EmptyView()
                         }
 
                         ForEach(Array(context.messages.enumerated()), id: \.offset) { _, m in
                                 if m.isOutgoing {
-                                    HStack(alignment: .top, spacing: 8) {
+                                    HStack(alignment: .top, spacing: 0) {
                                         Spacer()
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(String(describing: m.body))
@@ -112,10 +124,10 @@ VStack(alignment: .leading, spacing: 8) {
             .foregroundStyle(Color.white)
                                         }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.clear))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.accentColor))
                                     }
                                 } else {
-                                    HStack(alignment: .top, spacing: 8) {
+                                    HStack(alignment: .top, spacing: 0) {
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(String(describing: m.body))
             .font(.callout)
@@ -134,14 +146,8 @@ VStack(alignment: .leading, spacing: 8) {
                 }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("", selection: Binding(get: { context.selectedProtocol }, set: { eventSink("bind:selectedProtocol:\($0)") })) {
-                        Text("Matrix").tag("matrix")
-                        Text("Stalwart").tag("stalwart")
-                        Text("Bitchat").tag("bitchat")
-}
-                    .pickerStyle(.segmented)
-            .padding(.bottom, 4)
                     if context.bitchatSendBlocked {
                         Text("Bitchat is view-only in this build.")
             .font(.caption)
@@ -150,13 +156,20 @@ VStack(alignment: .leading, spacing: 8) {
                         EmptyView()
                     }
 
+                    Picker("", selection: Binding(get: { context.selectedProtocol }, set: { eventSink("bind:selectedProtocol:\($0)") })) {
+                        Text("Matrix").tag("matrix")
+                        Text("Stalwart").tag("stalwart")
+                        Text("Bitchat").tag("bitchat")
+}
+                    .pickerStyle(.segmented)
+            .padding(.bottom, 4)
                     HStack(alignment: .top, spacing: 8) {
                         TextField("iMessage", text: Binding(get: { context.draft }, set: { eventSink("bind:draft:\($0)") }))
             .textFieldStyle(.roundedBorder)
                         Button {
                             eventSink("send")
                         } label: {
-                                Text("Send")
+                                Image(systemName: "arrow.up.circle.fill")
                         }
             .buttonStyle(.borderedProminent)
                     }

@@ -7,7 +7,7 @@ import Foundation
 public final class AurorBridge {
     private var plugins: [String: any AurorPlugin] = [:]
 
-    /// Default bridge: registers the Rust CorePlugin and AppPlugin.
+    /// Default bridge: registers built-in Rust plugins.
     public init() {
         register(RustPlugin(id: "core"))
         register(RustPlugin(id: "app"))
@@ -37,4 +37,26 @@ public final class AurorBridge {
         let json = try invoke(pluginId: pluginId, method: method, payload: payload)
         return try JSONDecoder().decode(T.self, from: Data(json.utf8))
     }
+
+    /// Convenience: dispatch to a Rust/JS plugin and decode the successful
+    /// `{ ok, data }` envelope payload as `T`.
+    public func invokeData<T: Decodable>(
+        pluginId: String,
+        method: String,
+        payload: String = "{}",
+        as _: T.Type = T.self
+    ) throws -> T {
+        let json = try invoke(pluginId: pluginId, method: method, payload: payload)
+        let envelope = try JSONDecoder().decode(PluginEnvelope<T>.self, from: Data(json.utf8))
+        guard envelope.ok, let data = envelope.data else {
+            throw AurorPluginError(envelope.error ?? "plugin \(pluginId).\(method) returned no data")
+        }
+        return data
+    }
+}
+
+public struct PluginEnvelope<T: Decodable>: Decodable {
+    public let ok: Bool
+    public let data: T?
+    public let error: String?
 }

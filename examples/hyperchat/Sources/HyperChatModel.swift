@@ -1,8 +1,14 @@
 #if canImport(Aurorality)
 import Aurorality
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 import Foundation
 import Observation
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 /// Orchestrates HyperChat state, transport health, and `.crepus` → `eventSink` actions.
 @Observable
@@ -12,6 +18,9 @@ public final class HyperChatModel {
     public var draft: String = ""
     /// `matrix` | `stalwart` | `bitchat` | ``
     public var selectedProtocol: String = ""
+
+    /// Bound from SwiftUI for Settings sheet (`menubar` → `openSettings`).
+    public var showSettingsSheet = false
 
     /// Sidebar + native UI; updated by `refreshTransportHealth()`.
     public private(set) var matrixTransport: TransportSidebarStatus = .placeholder
@@ -30,11 +39,33 @@ public final class HyperChatModel {
     @ObservationIgnored private let bridge: AurorBridge
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let keyPrefix = "hyperchat.transport."
+    @ObservationIgnored private var pollTimer: Timer?
+    @ObservationIgnored private var typingTimer: Timer?
+    @ObservationIgnored private var seenMatrixEvents = Set<String>()
+    @ObservationIgnored private var typingUserIdsByRoom: [String: [String]] = [:]
+    #if canImport(AppKit)
+        @ObservationIgnored private var appActive = true
+    #endif
+
+    private let bundleId =
+        Bundle.main.bundleIdentifier ?? "dev.aurorality.example.hyperchat"
+
+    /// Typing hint shown under the transcript (`typingindicator` tag).
+    public private(set) var typingLine: String = ""
 
     public init(bridge: AurorBridge) {
         self.bridge = bridge
         applyStoredTransportConfig()
         seedIfNeeded()
+        loadPersistedSnapshot()
+        reschedulePollingTimer()
+        requestNotificationsIfNeeded()
+        updateDockBadge()
+    }
+
+    deinit {
+        pollTimer?.invalidate()
+        typingTimer?.invalidate()
     }
 
     /// Snapshot for `HyperChatGeneratedView` / native UI.
@@ -58,7 +89,9 @@ public final class HyperChatModel {
             canSend: canSend,
             newConversationPrompt: selectedProtocol.isEmpty,
             bitchatSendBlocked: bitchatSendBlocked,
-            sendDisabledHint: sendDisabledHint
+            sendDisabledHint: sendDisabledHint,
+            totalUnread: conversations.reduce(0) { $0 + max(0, $1.unread) },
+            typingLine: typingLine
         )
     }
 
@@ -117,6 +150,7 @@ public final class HyperChatModel {
         )
         selectedConversationId = id
         threadMessages[id] = []
+        persistSnapshot()
     }
 
     public func deleteConversations(at offsets: IndexSet) {
@@ -131,6 +165,7 @@ public final class HyperChatModel {
         if let sel = selectedConversationId, removedIds.contains(sel) {
             selectedConversationId = conversations.first?.id
         }
+        persistSnapshot()
     }
 
     public func syncProtocolLabelForSelection() {
@@ -145,6 +180,7 @@ public final class HyperChatModel {
         if raw.hasPrefix("bind:draft:") {
             let rest = String(raw.dropFirst("bind:draft:".count))
             draft = rest
+            scheduleTypingPing()
             return
         }
         if raw.hasPrefix("bind:selectedProtocol:") {
@@ -160,6 +196,7 @@ public final class HyperChatModel {
                 if let selected = conversations.first(where: { $0.id == id }) {
                     selectedProtocol = protocolId(fromTitle: selected.protocolLabel)
                 }
+                clearUnread(for: id)
             }
             return
         }
@@ -179,6 +216,14 @@ public final class HyperChatModel {
         case "pickBitchat":
             selectedProtocol = "bitchat"
             syncProtocolLabelForSelection()
+        case "openSettings":
+            showSettingsSheet = true
+        case "archiveSelected":
+            archiveSelectedConversation()
+        case "openInfo":
+            break
+        case "pickAttachment":
+            pickAttachment()
         default:
             break
         }
@@ -195,6 +240,21 @@ public final class HyperChatModel {
         stalwartTransport = parseTransportHealth(json: stalwartHealthJson())
         bitchatTransport = parseBitchatTransport(json: bitchatStatusJson())
     }
+
+    #if canImport(AppKit)
+        /// Hook `NSApplication.didBecomeActiveNotification`.
+        public func applicationDidBecomeActive() {
+            appActive = true
+            reschedulePollingTimer()
+            refreshTransportHealth()
+        }
+
+        /// Hook `NSApplication.didResignActiveNotification`.
+        public func applicationDidResignActive() {
+            appActive = false
+            reschedulePollingTimer()
+        }
+    #endif
 
     // MARK: - Transport config (stored + exported to process env)
 
@@ -243,7 +303,9 @@ public final class HyperChatModel {
         defaults.set(stalwartUsername, forKey: keyPrefix + "stalwart.username")
         defaults.set(stalwartPassword, forKey: keyPrefix + "stalwart.password")
         applyStoredTransportConfig()
+        reloadTransports()
         refreshTransportHealth()
+        persistSnapshot()
     }
 
     private func applyStoredTransportConfig() {
@@ -365,13 +427,18 @@ public final class HyperChatModel {
 
         let json: String = {
             switch sanitizeProtocol(selectedProtocol) {
-            case "matrix": return matrixSendJson(text: text)
+            case "matrix":
+                if let room = effectiveMatrixRoomId(), !room.isEmpty {
+                    return matrixSendRoomJson(roomId: room, text: text)
+                }
+                return matrixSendJson(text: text)
             case "stalwart": return stalwartSendJson(text: text)
             default: return "{}"
             }
         }()
         if json.contains("\"error\"") {
             markLastFailed(conv: conv, detail: extractError(json) ?? json)
+            persistSnapshot()
             return
         }
         if json.contains("\"accepted\":false") {
@@ -379,6 +446,7 @@ public final class HyperChatModel {
         } else {
             markLastSent(conv: conv)
         }
+        persistSnapshot()
     }
 
     private func markLastSent(conv: String) {
@@ -436,6 +504,342 @@ public final class HyperChatModel {
         if let dataObj = obj["data"] as? [String: Any],
             let r = dataObj["reason"] as? String { return r }
         return nil
+    }
+
+    // MARK: - Persistence (`aurorStore`)
+
+    private enum SnapKeys {
+        static let root = "hyperchat.snapshot.v1"
+    }
+
+    private struct PersistedSnapshot: Codable {
+        var conversations: [ConversationItem]
+        var selectedConversationId: String?
+        var threadMessages: [String: [MessageItem]]
+        var draft: String
+        var selectedProtocol: String
+    }
+
+    private func loadPersistedSnapshot() {
+        guard let raw = try? aurorStoreGet(bundleId: bundleId, key: SnapKeys.root),
+            let data = raw.data(using: .utf8),
+            let snap = try? JSONDecoder().decode(PersistedSnapshot.self, from: data)
+        else { return }
+        if !snap.conversations.isEmpty { conversations = snap.conversations }
+        selectedConversationId = snap.selectedConversationId
+        threadMessages = snap.threadMessages
+        draft = snap.draft
+        selectedProtocol = snap.selectedProtocol
+    }
+
+    private func persistSnapshot() {
+        let snap = PersistedSnapshot(
+            conversations: conversations,
+            selectedConversationId: selectedConversationId,
+            threadMessages: threadMessages,
+            draft: draft,
+            selectedProtocol: selectedProtocol
+        )
+        guard let data = try? JSONEncoder().encode(snap),
+            let json = String(data: data, encoding: .utf8)
+        else { return }
+        try? aurorStoreSet(bundleId: bundleId, key: SnapKeys.root, json: json)
+        updateDockBadge()
+    }
+
+    #if canImport(AppKit)
+        private func updateDockBadge() {
+            let n = conversations.reduce(0) { $0 + max(0, $1.unread) }
+            NSApp.dockTile.badgeLabel = n > 0 ? "\(n)" : nil
+        }
+    #else
+        private func updateDockBadge() {}
+    #endif
+
+    // MARK: - Matrix polling
+
+    private var matrixCredentialsPresent: Bool {
+        let hs = matrixHomeserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tok = matrixAccessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !hs.isEmpty && !tok.isEmpty
+    }
+
+    private func effectiveMatrixRoomId() -> String? {
+        if let s = selectedConversationId, s.contains(":"), s.hasPrefix("!") { return s }
+        let envRoom = matrixRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return envRoom.isEmpty ? nil : envRoom
+    }
+
+    private func reschedulePollingTimer() {
+        pollTimer?.invalidate()
+        let interval = pollIntervalSeconds
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.pollTransportTick()
+        }
+        if let t = pollTimer {
+            RunLoop.main.add(t, forMode: .common)
+        }
+        pollTransportTick()
+    }
+
+    private var pollIntervalSeconds: TimeInterval {
+        #if canImport(AppKit)
+            return appActive ? 4 : 30
+        #else
+            return 6
+        #endif
+    }
+
+    private func pollTransportTick() {
+        guard matrixCredentialsPresent else { return }
+        ingestMatrixJoinedRooms()
+        ingestMatrixSync()
+        persistSnapshot()
+    }
+
+    private func ingestMatrixJoinedRooms() {
+        let json = matrixJoinedRoomsJson()
+        guard let data = json.data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let joined = obj["joined_rooms"] as? [String]
+        else { return }
+
+        var ids = Set(conversations.map(\.id))
+        for roomId in joined where !ids.contains(roomId) {
+            ids.insert(roomId)
+            conversations.append(
+                ConversationItem(
+                    id: roomId,
+                    title: shortRoomTitle(roomId),
+                    subtitle: "Matrix",
+                    protocolLabel: "Matrix",
+                    preview: "",
+                    unread: 0
+                )
+            )
+        }
+    }
+
+    private func shortRoomTitle(_ id: String) -> String {
+        if let colon = id.firstIndex(of: ":") {
+            return String(id[..<colon])
+        }
+        return id
+    }
+
+    private func ingestMatrixSync() {
+        let json = matrixSyncDeltaJson()
+        if json.contains("matrix not configured") || json.contains("\"error\"") { return }
+        guard let data = json.data(using: .utf8),
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let rooms = root["rooms"] as? [String: Any],
+            let join = rooms["join"] as? [String: Any]
+        else { return }
+
+        for (roomId, roomVal) in join {
+            guard let roomObj = roomVal as? [String: Any] else { continue }
+            if let timeline = roomObj["timeline"] as? [String: Any],
+                let events = timeline["events"] as? [[String: Any]]
+            {
+                for ev in events {
+                    ingestTimelineEvent(roomId: roomId, ev: ev)
+                }
+            }
+            if let ephemeral = roomObj["ephemeral"] as? [String: Any],
+                let events = ephemeral["events"] as? [[String: Any]]
+            {
+                for ev in events {
+                    ingestEphemeralEvent(roomId: roomId, ev: ev)
+                }
+            }
+        }
+        refreshTypingLine()
+    }
+
+    private func ingestTimelineEvent(roomId: String, ev: [String: Any]) {
+        guard ev["type"] as? String == "m.room.message" else { return }
+        let eventId = ev["event_id"] as? String ?? ""
+        if !eventId.isEmpty {
+            let dedupeKey = "\(roomId)|\(eventId)"
+            if seenMatrixEvents.contains(dedupeKey) { return }
+            seenMatrixEvents.insert(dedupeKey)
+        }
+        let content = ev["content"] as? [String: Any]
+        let body = content?["body"] as? String ?? ""
+        let sender = ev["sender"] as? String ?? ""
+        let outgoing = normalizeUser(sender) == normalizeUser(matrixUserId)
+        let msg = MessageItem(
+            id: eventId.isEmpty ? UUID().uuidString : eventId,
+            body: body,
+            metaLine: formatMeta(sender: sender),
+            isOutgoing: outgoing
+        )
+        appendMatrixMessage(roomId: roomId, msg: msg)
+    }
+
+    private func ingestEphemeralEvent(roomId: String, ev: [String: Any]) {
+        guard ev["type"] as? String == "m.typing" else { return }
+        let content = ev["content"] as? [String: Any]
+        let ids = content?["user_ids"] as? [String] ?? []
+        typingUserIdsByRoom[roomId] = ids
+    }
+
+    private func normalizeUser(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func formatMeta(sender: String) -> String {
+        let trimmed = sender.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "Matrix" }
+        if let colon = trimmed.firstIndex(of: ":") {
+            return String(trimmed[..<colon])
+        }
+        return trimmed
+    }
+
+    private func appendMatrixMessage(roomId: String, msg: MessageItem) {
+        var list = threadMessages[roomId] ?? []
+        if list.contains(where: { $0.id == msg.id }) { return }
+        list.append(msg)
+        threadMessages[roomId] = list
+
+        updateConversationPreview(roomId: roomId, body: msg.body)
+
+        if selectedConversationId != roomId, !msg.isOutgoing {
+            bumpUnread(roomId: roomId)
+            notifyIncoming(title: "HyperChat", body: msg.body, roomId: roomId)
+        }
+    }
+
+    private func updateConversationPreview(roomId: String, body: String) {
+        guard let idx = conversations.firstIndex(where: { $0.id == roomId }) else { return }
+        var c = conversations[idx]
+        c.preview = body
+        c.timeAgo = "now"
+        conversations[idx] = c
+    }
+
+    private func bumpUnread(roomId: String) {
+        guard let idx = conversations.firstIndex(where: { $0.id == roomId }) else { return }
+        var c = conversations[idx]
+        c.unread += 1
+        conversations[idx] = c
+    }
+
+    private func clearUnread(for roomId: String) {
+        guard let idx = conversations.firstIndex(where: { $0.id == roomId }) else { return }
+        var c = conversations[idx]
+        c.unread = 0
+        conversations[idx] = c
+        persistSnapshot()
+    }
+
+    private func refreshTypingLine() {
+        guard let rid = selectedConversationId,
+            let ids = typingUserIdsByRoom[rid], !ids.isEmpty
+        else {
+            typingLine = ""
+            return
+        }
+        let names = ids.map { formatMeta(sender: $0) }.joined(separator: ", ")
+        typingLine = "\(names) typing…"
+    }
+
+    private func scheduleTypingPing() {
+        typingTimer?.invalidate()
+        guard sanitizeProtocol(selectedProtocol) == "matrix",
+            let room = effectiveMatrixRoomId(), !room.isEmpty
+        else { return }
+        _ = matrixTypingJson(roomId: room, typing: true)
+        typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            guard let self, let room = self.effectiveMatrixRoomId(), !room.isEmpty else { return }
+            _ = matrixTypingJson(roomId: room, typing: false)
+        }
+        if let t = typingTimer {
+            RunLoop.main.add(t, forMode: .common)
+        }
+    }
+
+    private func requestNotificationsIfNeeded() {
+        #if canImport(UserNotifications)
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        #endif
+    }
+
+    private func notifyIncoming(title: String, body: String, roomId: String) {
+        #if canImport(UserNotifications) && canImport(AppKit)
+            guard !appActive else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.userInfo = ["roomId": roomId]
+            let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(req)
+        #endif
+    }
+
+    private func archiveSelectedConversation() {
+        guard let idx = conversations.firstIndex(where: { $0.id == selectedConversationId }) else { return }
+        conversations.remove(at: idx)
+        if let sel = selectedConversationId {
+            threadMessages.removeValue(forKey: sel)
+        }
+        selectedConversationId = conversations.first?.id
+        persistSnapshot()
+    }
+
+    private func pickAttachment() {
+        #if canImport(AppKit)
+            guard sanitizeProtocol(selectedProtocol) == "matrix",
+                let room = effectiveMatrixRoomId(), !room.isEmpty
+            else { return }
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            guard let data = try? Data(contentsOf: url) else { return }
+            let b64 = data.base64EncodedString()
+            let mime = mimeForPathExtension(url.pathExtension)
+            let filename = url.lastPathComponent
+            let json = matrixUploadMediaJson(
+                roomId: room,
+                filename: filename,
+                mime: mime,
+                dataBase64: b64
+            )
+            if json.contains("\"error\"") {
+                if let conv = selectedConversationId {
+                    appendFailed(
+                        conv: conv,
+                        text: filename,
+                        meta: "Upload failed — \(extractError(json) ?? json)"
+                    )
+                }
+                persistSnapshot()
+                return
+            }
+            guard let conv = selectedConversationId else { return }
+            let optimistic = MessageItem(
+                id: UUID().uuidString,
+                body: "📎 \(filename)",
+                metaLine: "Matrix · attachment sent",
+                isOutgoing: true
+            )
+            threadMessages[conv, default: []].append(optimistic)
+            persistSnapshot()
+        #endif
+    }
+
+    private func mimeForPathExtension(_ ext: String) -> String {
+        switch ext.lowercased() {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "pdf": return "application/pdf"
+        case "txt": return "text/plain"
+        default: return "application/octet-stream"
+        }
     }
 }
 

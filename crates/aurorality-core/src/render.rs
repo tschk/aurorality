@@ -21,8 +21,9 @@ pub fn render(template: &str, context_json: &str) -> Result<String, AurorError> 
 }
 
 fn context_from_json(json: &str) -> Result<TemplateContext, AurorError> {
-    let v: Value = serde_json::from_str(json)
-        .map_err(|e| AurorError::InvalidContext { message: e.to_string() })?;
+    let v: Value = serde_json::from_str(json).map_err(|e| AurorError::InvalidContext {
+        message: e.to_string(),
+    })?;
 
     let obj = v.as_object().ok_or_else(|| AurorError::InvalidContext {
         message: "context_json must be a JSON object".to_string(),

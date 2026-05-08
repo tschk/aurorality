@@ -31,6 +31,14 @@ struct HyperChatApp: App {
         }
         .defaultSize(width: 960, height: 700)
         .commands {
+            CommandMenu("HyperChat") {
+                SettingsLink {
+                    Text("Settings…")
+                }
+                .keyboardShortcut(",", modifiers: .command)
+                Divider()
+                Button("Refresh Transport Status", action: refreshTransportHealth)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Conversation", action: addConversation)
                 .keyboardShortcut("n", modifiers: .command)

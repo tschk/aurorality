@@ -42,6 +42,8 @@ struct AurorNodeView: View {
         case .image:      imageView
         case .scroll:     scrollView
         case .slotRotate: slotRotateView
+        case .input:      inputView
+        case .picker:     pickerView
         }
     }
 
@@ -164,6 +166,37 @@ struct AurorNodeView: View {
             TimedTextView(phrases: phrases, intervalMs: node.intervalMs ?? 2000)
                 .auroraTextStyle(node.style)
                 .auroraLayout(node.style)
+        }
+    }
+
+    // MARK: input / picker
+
+    /// IR-only preview (`swiftgen` produces fully bound compose controls for apps like HyperChat).
+    @ViewBuilder
+    private var inputView: some View {
+        if node.multiline == true {
+            TextEditor(text: .constant(""))
+                .frame(minHeight: 80)
+                .auroraTextStyle(node.style)
+                .auroraLayout(node.style)
+        } else {
+            TextField(node.placeholder ?? "", text: .constant(""))
+                .textFieldStyle(.roundedBorder)
+                .auroraTextStyle(node.style)
+                .auroraLayout(node.style)
+        }
+    }
+
+    @ViewBuilder
+    private var pickerView: some View {
+        if let opts = node.options, !opts.isEmpty, let first = opts.first {
+            Picker("", selection: .constant(first.value)) {
+                ForEach(opts, id: \.value) { o in
+                    Text(o.label).tag(o.value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .auroraLayout(node.style)
         }
     }
 

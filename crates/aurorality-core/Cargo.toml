@@ -23,6 +23,8 @@ js = []
 serde = { workspace = true }
 serde_json = { workspace = true }
 uniffi = { workspace = true }
+eqswift = { workspace = true }
 crepuscularity-native = { workspace = true }
 crepuscularity-core = { workspace = true }
 thiserror = "2"
+ureq = { workspace = true }

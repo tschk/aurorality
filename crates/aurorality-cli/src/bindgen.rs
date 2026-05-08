@@ -29,9 +29,13 @@ pub fn run(input_dir: &Path, output_dir: &Path) -> Result<()> {
             let swift = generate_swift_plugin(&plugin_id, &methods);
             let struct_name = pascal_case(&plugin_id);
             let out = output_dir.join(format!("{struct_name}Plugin.swift"));
-            std::fs::write(&out, swift)
-                .with_context(|| format!("write {}", out.display()))?;
-            println!("  {} ({} methods)  →  {}", plugin_id, methods.len(), out.display());
+            std::fs::write(&out, swift).with_context(|| format!("write {}", out.display()))?;
+            println!(
+                "  {} ({} methods)  →  {}",
+                plugin_id,
+                methods.len(),
+                out.display()
+            );
             count += 1;
         }
     }
@@ -55,7 +59,10 @@ pub fn extract_fn_names(code: &str) -> Vec<String> {
             continue;
         };
         // Extract identifier before '('
-        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
         if !name.is_empty() {
             names.push(name);
         }

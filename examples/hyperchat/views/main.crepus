@@ -1,25 +1,56 @@
+menubar
+  menu title="HyperChat"
+    menuitem @click="openSettings" shortcut="cmd+,"
+      "Settings…"
+    menuseparator
+    menuitem @click="refreshStatus" shortcut="cmd+r"
+      "Refresh"
+  menu title="Conversation"
+    menuitem @click="newConversation" shortcut="cmd+n"
+      "New Conversation"
+    menuitem @click="archiveSelected"
+      "Archive"
+  menu title="Transport"
+    menuitem @click="pickMatrix"
+      "Use Matrix"
+    menuitem @click="pickStalwart"
+      "Use Stalwart"
+    menuitem @click="pickBitchat"
+      "Bitchat (read-only)"
+
+dockbadge bind=totalUnread
+
 navigationsplitview
   sidebar
-    section header="Conversations"
-      button button-bordered @click="newConversation"
-        hstack gap-1
-          sf-plus
-          span "New"
-      for conv in {conversations}
-        item @click="selectConversation:{conv.id}"
-          vstack gap-1 p-2
-            span text-sm font-semibold
-              "{conv.title}"
-            span text-xs text-zinc-500
-              "{conv.subtitle}"
-            span text-xs text-zinc-500
-              "{conv.protocolLabel}"
-
+    section header="Messages"
+      item @click="newConversation"
+        hstack gap-2 p-2
+          sf-square.and.pencil
+          span text-sm font-semibold
+            "New"
+      for c in {conversations}
+        item @click="selectConversation:{c.id}"
+          hstack gap-3 p-2 items-center
+            avatar bind=c.avatarSeed size=36
+            vstack gap-0.5 flex-grow
+              hstack gap-2
+                span text-sm font-semibold
+                  "{c.title}"
+                spacer
+                span text-xs text-zinc-500
+                  "{c.timeAgo}"
+              span text-xs text-zinc-500 line-clamp-1
+                "{c.preview}"
+            if c.unread > 0
+              badge
+                "{c.unread}"
+            else
+              spacer
     section header="Protocols"
       item
         hstack gap-2
           span text-xs text-zinc-500
-            "Transport status"
+            "Status"
           spacer
           button button-bordered @click="refreshStatus"
             "Refresh"
@@ -29,47 +60,52 @@ navigationsplitview
       item
         span text-xs text-zinc-500
           "{stalwartStatusLine}"
+      item
+        span text-xs text-zinc-500
+          "{bitchatStatusLine}"
 
   detail
     vstack gap-0 flex-grow
-      vstack gap-1 p-3 border-b border-zinc-200
-        span text-sm font-semibold
-          "{recipientTitle}"
-        span text-xs text-zinc-500
-          "{protocolSummary}"
+      hstack p-3 border-b border-zinc-200 items-center
+        button button-plain @click="newConversation"
+          sf-square.and.pencil
+        spacer
+        vstack gap-0
+          span text-base font-semibold
+            "{recipientTitle}"
+          span text-xs text-zinc-500
+            "{protocolSummary}"
+        spacer
+        button button-plain @click="openInfo"
+          sf-info.circle
 
       scrollview flex flex-col gap-2 p-4 flex-grow
         if newConversationPrompt
-          vstack gap-1 p-3 rounded bg-zinc-100
-            span text-sm
-              "Pick Matrix or Stalwart below to start messaging."
+          hstack
+            spacer
+            vstack gap-1 p-3 rounded-lg bg-zinc-100
+              span text-sm
+                "Pick Matrix or Stalwart to start messaging."
+            spacer
         for m in {messages}
-          if m.isOutgoing
-            hstack gap-2
-              spacer
-              vstack gap-1 p-3 rounded bg-blue-700
-                span text-sm text-white
-                  "{m.body}"
-                span text-xs text-white
-                  "{m.metaLine}"
-          else
-            hstack gap-2
-              vstack gap-1 p-3 rounded bg-zinc-100
-                span text-sm
-                  "{m.body}"
-                span text-xs text-zinc-500
-                  "{m.metaLine}"
-              spacer
+          messagebubble bind=m
 
-      vstack gap-2 p-3 border-t border-zinc-200
+        if typingLine != ""
+          typingindicator label="{typingLine}"
+
+      divider
+
+      vstack gap-2 p-3
+        if bitchatSendBlocked
+          span text-xs text-zinc-500
+            "Bitchat is view-only in this build."
         picker bind=selectedProtocol
           span value="matrix" "Matrix"
           span value="stalwart" "Stalwart"
           span value="bitchat" "Bitchat"
-        if bitchatSendBlocked
-          span text-xs text-zinc-500
-            "Bitchat is view-only in this build."
-        hstack gap-2
-          textfield flex rounded border border-zinc-300 p-2 bind=draft placeholder="iMessage"
-          button button-prominent @click="send"
-            "Send"
+        hstack gap-2 items-center
+          button button-plain @click="pickAttachment"
+            sf-plus.circle
+          textfield flex-grow pill border border-zinc-300 bind=draft placeholder="Message"
+          button button-prominent @click="send" disabled="{!canSend}"
+            sf-arrow.up.circle.fill

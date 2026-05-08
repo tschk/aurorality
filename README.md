@@ -30,21 +30,27 @@ aurorality/
 │   ├── AurorView.swift    # SwiftUI renderer
 │   ├── AurorState.swift   # State management
 │   ├── AurorBridge.swift # Plugin calls
-│   └── HotReloadClient.swift
+│   ├── HotReloadClient.swift
+│   ├── HotReloadBus.swift / HotReloadHUD.swift / AurorDevOverlay.swift
+│   └── TransportTypes.swift
 └── examples/
     ├── basic/
     ├── counter/
+    ├── hyperchat/
     └── textanalyzer/
 ```
 
 ## Quick Start
 
 ```bash
-# Build the Rust core
-cargo build -p aurorality-core
+# Build the Rust core with JavaScript plugin support
+cargo build -p aurorality-core --features js
 
-# Generate Swift bindings (after cargo build)
-# The .swift files in swift/Sources/ are manually maintained
+# Generate eqswift/UniFFI Swift bindings
+cargo run -p aurorality-core --features js --bin uniffi-bindgen generate \
+  --library target/debug/libaurorality_core.dylib \
+  --language swift --out-dir generated
+cp generated/aurorality_coreFFI.modulemap generated/module.modulemap
 
 # Run dev server
 cargo run -p aurorality-cli -- dev examples/basic
@@ -132,20 +138,35 @@ Built-in Rust plugins accessible via `AurorBridge`:
 - `analyze(text)` → `{ wordCount, charCount, lineCount, topWord, topWordCount }`
 - `tokenize(text)` → `{ tokens: [] }`
 
+## Examples
+
+Each example demonstrates the three backend styles together:
+
+- **Rust**: built-in framework plugins exposed through eqswift/UniFFI (`app`, `core`, `stats`), plus example-local Rust crates where the app needs domain logic
+- **JavaScript**: JavaScriptCore plugins loaded from each example's `scripts/backend.js`
+- **Swift**: app-local plugins for UI state and persistence
+
+`examples/hyperchat` is the larger chat prototype. Its chat routing lives in `examples/hyperchat/rust-backend`, an eqswift-backed Rust crate, while Swift owns local chat state and JavaScript scores draft routing. It combines Bitchat-style nearby mesh, Matrix federation, `../stalwart-lite` self-hosted archive semantics, and direct P2P routing into one optimized local chat surface.
+
 ## Hot Reload
 
-The dev server watches `.crepus` files and sends WebSocket patches:
+`aurorality dev` watches `.crepus` files and pushes updates over WebSocket:
 
-1. `fullReload` — initial IR
-2. `patch` — incremental `IrMutation` ops:
-   - `replaceRoot`, `replaceNode`, `insertNode`, `removeNode`
-   - `updateText`, `updateStyle`
+1. **`DevHello` on connect** — session id, roots, optional swiftgen paths.
+2. **IR reload / patches** — unless `--no-ir`: full IR plus incremental `IrMutation` ops (`replaceRoot`, `replaceNode`, …).
+3. **`SwiftgenStatus`** — when `--swiftgen-view` / `--swiftgen-out` are set, each save re-runs `swiftgen` and reports ok/errors + output path.
+
+Swift hosts use **`HotReloadClient`** → **`HotReloadBus`** and optional **`AurorDevOverlay`** (`AURORALITY_DEV=1` or `.environment(\.aurorDevEnabled, true)`) for a corner HUD + live IR toggle.
+
+## Persistence (`aurorStore`)
+
+`aurorality-core` exposes **`aurorStoreGet` / `aurorStoreSet` / `aurorStorePath`** (JSON blob under `~/Library/Application Support/<bundle_id>/aurorality-store.json`) for lightweight app state — used by examples like HyperChat for transcripts/settings snapshots.
 
 ## Dependencies
 
 - `crepuscularity-native` — IR + template parsing
 - `crepuscularity-core` — context + evaluation
-- `uniffi` — Rust ↔ Swift FFI
+- `eqswift` / `uniffi` — Rust ↔ Swift FFI
 
 ## License
 

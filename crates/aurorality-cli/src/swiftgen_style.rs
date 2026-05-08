@@ -167,6 +167,7 @@ fn background_color(classes: &[String]) -> Option<Zinc> {
             "bg-zinc-50" => return Some(Zinc::Z50),
             "bg-zinc-100" => return Some(Zinc::Z100),
             "bg-zinc-200" => return Some(Zinc::Z200),
+            "bg-blue-700" => return Some(Zinc::Blue700),
             _ => {}
         }
     }
@@ -205,13 +206,19 @@ fn border_color_from_classes(classes: &[String]) -> Option<Zinc> {
     None
 }
 
-/// TextField — bordered “rounded” style like the crepus example.
-pub fn text_field_extras(classes: &[String]) -> &'static str {
-    if classes.iter().any(|c| c == "input-plain") {
-        "\n            .textFieldStyle(.plain)"
+/// TextField — bordered “rounded” style like the crepus example; `pill` adds iMessage-like capsule chrome.
+pub fn text_field_extras(classes: &[String]) -> String {
+    let mut s = String::new();
+    if classes.iter().any(|c| c == "pill") {
+        s.push_str(
+            "\n            .textFieldStyle(.plain)\n            .padding(.horizontal, 12)\n            .padding(.vertical, 8)\n            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(nsColor: .textBackgroundColor)))",
+        );
+    } else if classes.iter().any(|c| c == "input-plain") {
+        s.push_str("\n            .textFieldStyle(.plain)");
     } else {
-        "\n            .textFieldStyle(.roundedBorder)"
+        s.push_str("\n            .textFieldStyle(.roundedBorder)");
     }
+    s
 }
 
 pub fn button_extras(classes: &[String]) -> &'static str {

@@ -4,6 +4,8 @@ mod bindgen;
 mod bundle;
 mod dev_server;
 mod scaffold;
+mod swiftgen;
+mod swiftgen_style;
 
 use std::path::PathBuf;
 
@@ -28,13 +30,30 @@ enum Commands {
     /// Launch the Aurorality Runner app on your simulator/device, then connect
     /// it to the address printed by this command.
     Dev {
-        /// Directory of .crepus files to watch.
+        /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
 
         /// WebSocket port for the Runner app to connect to.
         #[arg(short, long, default_value_t = 47832)]
         port: u16,
+
+        /// Path to the `.crepus` file for `swiftgen` (hybrid reload).
+        #[arg(long)]
+        swiftgen_view: Option<PathBuf>,
+        /// Output directory for generated Swift (pairs with `--swiftgen-view`).
+        #[arg(long)]
+        swiftgen_out: Option<PathBuf>,
+        /// Generated Swift struct name (pairs with `--swiftgen-view`).
+        #[arg(long)]
+        swiftgen_name: Option<String>,
+        /// Swift context type name for swiftgen (pairs with `--swiftgen-view`).
+        #[arg(long)]
+        swiftgen_context_type: Option<String>,
+
+        /// Skip IR diff/render; only swiftgen events (requires `--swiftgen-view`).
+        #[arg(long, default_value_t = false)]
+        no_ir: bool,
     },
 
     /// Render all .crepus files in a directory to JSON IR for bundling.
@@ -73,6 +92,23 @@ enum Commands {
         bundler: String,
     },
 
+    /// Generate SwiftUI source from a `.crepus` template (compile-time codegen).
+    #[command(name = "swiftgen")]
+    SwiftGen {
+        /// Path to a single `.crepus` file.
+        #[arg(long)]
+        view: PathBuf,
+        /// Output directory for `<view-name>.swift`.
+        #[arg(long)]
+        out: PathBuf,
+        /// Name of the generated Swift `struct` (e.g. `HyperChatGeneratedView`).
+        #[arg(long)]
+        view_name: String,
+        /// Swift type name for the `context` parameter (fields must match template bindings).
+        #[arg(long, default_value = "HyperChatContext")]
+        context_type: String,
+    },
+
     /// Generate typed Swift wrappers from JS plugin export signatures.
     Bindgen {
         /// Directory of .js plugin files to scan.
@@ -89,8 +125,47 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Dev { watch, port } => {
-            dev_server::run(watch, port).await?;
+        Commands::Dev {
+            watch,
+            port,
+            swiftgen_view,
+            swiftgen_out,
+            swiftgen_name,
+            swiftgen_context_type,
+            no_ir,
+        } => {
+            let ir_enabled = !no_ir;
+            let swiftgen = match (
+                swiftgen_view,
+                swiftgen_out,
+                swiftgen_name,
+                swiftgen_context_type,
+            ) {
+                (Some(view), Some(out), Some(view_name), Some(context_type)) => {
+                    Some(dev_server::SwiftgenDevConfig {
+                        view: std::fs::canonicalize(&view).unwrap_or(view),
+                        out,
+                        view_name,
+                        context_type,
+                    })
+                }
+                (None, None, None, None) => None,
+                _ => {
+                    anyhow::bail!(
+                        "swiftgen requires --swiftgen-view, --swiftgen-out, --swiftgen-name, and --swiftgen-context-type"
+                    );
+                }
+            };
+            if no_ir && swiftgen.is_none() {
+                anyhow::bail!("--no-ir requires --swiftgen-view (and related swiftgen flags)");
+            }
+            dev_server::run(dev_server::DevServerConfig {
+                watch_dir: watch,
+                port,
+                swiftgen,
+                ir_enabled,
+            })
+            .await?;
         }
         Commands::Build { watch, out } => {
             build_all(&watch, &out)?;
@@ -98,7 +173,13 @@ async fn main() -> Result<()> {
         Commands::New { name } => {
             scaffold::new_project(&name)?;
         }
-        Commands::Bundle { views, out, js_entry, js_out, bundler } => {
+        Commands::Bundle {
+            views,
+            out,
+            js_entry,
+            js_out,
+            bundler,
+        } => {
             bundle::run(bundle::BundleConfig {
                 views_dir: views,
                 ir_out: out,
@@ -109,6 +190,14 @@ async fn main() -> Result<()> {
         }
         Commands::Bindgen { input, output } => {
             bindgen::run(&input, &output)?;
+        }
+        Commands::SwiftGen {
+            view,
+            out,
+            view_name,
+            context_type,
+        } => {
+            swiftgen::run(&view, &out, &view_name, &context_type)?;
         }
     }
 
@@ -127,9 +216,8 @@ fn build_all(views_dir: &PathBuf, out_dir: &PathBuf) -> Result<()> {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "crepus") {
             let content = std::fs::read_to_string(&path)?;
-            let ir = render_template_to_ir(&content, &ctx).map_err(|e| {
-                anyhow::anyhow!("failed to render {}: {e}", path.display())
-            })?;
+            let ir = render_template_to_ir(&content, &ctx)
+                .map_err(|e| anyhow::anyhow!("failed to render {}: {e}", path.display()))?;
             let json = to_json_pretty(&ir)?;
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
             let out_path = out_dir.join(format!("{stem}.json"));

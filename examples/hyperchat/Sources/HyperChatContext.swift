@@ -16,10 +16,12 @@ public struct HyperChatContext: Sendable {
     public var bitchatStatusLine: String
     public var canSend: Bool
     public var newConversationPrompt: Bool
-    /// `true` when Bitchat is selected — sends are blocked in this demo.
     public var bitchatSendBlocked: Bool
-    /// Tooltip / accessibility hint when Send is disabled.
     public var sendDisabledHint: String?
+    /// Total unread for dock badge + `dockbadge` template binding.
+    public var totalUnread: Int
+    /// Optional line under the message list (typing / status).
+    public var typingLine: String
 
     public init(
         conversations: [ConversationItem] = [],
@@ -37,7 +39,9 @@ public struct HyperChatContext: Sendable {
         canSend: Bool = false,
         newConversationPrompt: Bool = false,
         bitchatSendBlocked: Bool = false,
-        sendDisabledHint: String? = nil
+        sendDisabledHint: String? = nil,
+        totalUnread: Int = 0,
+        typingLine: String = ""
     ) {
         self.conversations = conversations
         self.selectedConversationId = selectedConversationId
@@ -55,24 +59,43 @@ public struct HyperChatContext: Sendable {
         self.newConversationPrompt = newConversationPrompt
         self.bitchatSendBlocked = bitchatSendBlocked
         self.sendDisabledHint = sendDisabledHint
+        self.totalUnread = totalUnread
+        self.typingLine = typingLine
     }
 }
 
-public struct ConversationItem: Identifiable, Hashable, Sendable {
+public struct ConversationItem: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public var title: String
     public var subtitle: String
     public var protocolLabel: String
+    public var avatarSeed: String
+    public var timeAgo: String
+    public var preview: String
+    public var unread: Int
 
-    public init(id: String, title: String, subtitle: String, protocolLabel: String) {
+    public init(
+        id: String,
+        title: String,
+        subtitle: String,
+        protocolLabel: String,
+        avatarSeed: String = "",
+        timeAgo: String = "",
+        preview: String = "",
+        unread: Int = 0
+    ) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.protocolLabel = protocolLabel
+        self.avatarSeed = avatarSeed.isEmpty ? id : avatarSeed
+        self.timeAgo = timeAgo
+        self.preview = preview.isEmpty ? subtitle : preview
+        self.unread = unread
     }
 }
 
-public struct MessageItem: Identifiable, Hashable, Sendable {
+public struct MessageItem: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public var body: String
     public var metaLine: String

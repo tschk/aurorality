@@ -42,6 +42,8 @@ struct AurorNodeView: View {
         case .image:      imageView
         case .scroll:     scrollView
         case .slotRotate: slotRotateView
+        case .input:      inputView
+        case .picker:     pickerView
         }
     }
 
@@ -108,7 +110,8 @@ struct AurorNodeView: View {
     private var buttonView: some View {
         Button(node.label ?? "") {
             if let handler = node.onClick {
-                try? bridge.invoke(pluginId: "core", method: "echo", payload: "{\"event\":\"\(handler)\"}")
+                NotificationCenter.default.post(name: .init("auror.event"), object: handler)
+                _ = try? bridge.invoke(pluginId: "core", method: "echo", payload: "{\"event\":\"\(handler)\"}")
             }
         }
         .auroraTextStyle(node.style)
@@ -163,6 +166,37 @@ struct AurorNodeView: View {
             TimedTextView(phrases: phrases, intervalMs: node.intervalMs ?? 2000)
                 .auroraTextStyle(node.style)
                 .auroraLayout(node.style)
+        }
+    }
+
+    // MARK: input / picker
+
+    /// IR-only preview (`swiftgen` produces fully bound compose controls for apps like HyperChat).
+    @ViewBuilder
+    private var inputView: some View {
+        if node.multiline == true {
+            TextEditor(text: .constant(""))
+                .frame(minHeight: 80)
+                .auroraTextStyle(node.style)
+                .auroraLayout(node.style)
+        } else {
+            TextField(node.placeholder ?? "", text: .constant(""))
+                .textFieldStyle(.roundedBorder)
+                .auroraTextStyle(node.style)
+                .auroraLayout(node.style)
+        }
+    }
+
+    @ViewBuilder
+    private var pickerView: some View {
+        if let opts = node.options, !opts.isEmpty, let first = opts.first {
+            Picker("", selection: .constant(first.value)) {
+                ForEach(opts, id: \.value) { o in
+                    Text(o.label).tag(o.value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .auroraLayout(node.style)
         }
     }
 
@@ -237,9 +271,9 @@ struct AurorTextStyleModifier: ViewModifier {
         // white-space handling
         switch style?.whiteSpace {
         case "nowrap":
-            return AnyView(processed.allowTightening(false).fixedSize(horizontal: true, vertical: false))
+            return AnyView(processed.fixedSize(horizontal: true, vertical: false))
         case "pre", "pre-wrap":
-            return AnyView(processed.environment(\.lineBreakMode, .byClipping))
+            return AnyView(processed.fixedSize(horizontal: false, vertical: true))
         default:
             return AnyView(processed)
         }
@@ -387,14 +421,13 @@ private extension View {
     }
 
     /// Position & layering: absolute, relative, fixed
-    @ViewBuilder
     func auroraPosition(_ style: ViewStyle?) -> some View {
-        var view = self
+        var view = AnyView(self)
         // Handle z-index first (applies to all positions)
         if let z = style?.zIndex {
             view = AnyView(view.zIndex(Double(z)))
         }
-        guard let pos = style?.position else { return AnyView(view) }
+        guard let pos = style?.position else { return view }
         switch pos {
         case "absolute", "fixed":
             // For absolute positioning, wrap in a ZStack with offsets
@@ -412,9 +445,8 @@ private extension View {
     }
 
     /// Transform: translate, scale, rotate
-    @ViewBuilder
     func auroraTransform(_ style: ViewStyle?) -> some View {
-        var view = self
+        var view = AnyView(self)
         if let tx = style?.translateX {
             view = AnyView(view.offset(x: CGFloat(tx)))
         }
@@ -435,7 +467,6 @@ private extension View {
     }
 
     /// Shadow
-    @ViewBuilder
     func auroraShadow(_ style: ViewStyle?) -> some View {
         guard let shadowColor = style?.shadowColor,
               let swiftColor = Color(cssString: shadowColor) else {
@@ -448,7 +479,6 @@ private extension View {
     }
 
     /// Text overflow
-    @ViewBuilder
     func auroraTextOverflow(_ style: ViewStyle?) -> some View {
         guard let overflow = style?.textOverflow else { return AnyView(self) }
         switch overflow {
@@ -481,9 +511,9 @@ extension ViewStyle {
     var swiftFont: Font? {
         var font: Font
         if let size = fontSize {
-            font = .system(size: CGFloat(size))
+            font = .system(size: CGFloat(size), design: fontFamily == "serif" ? .serif : .default)
         } else {
-            font = .body
+            font = fontFamily == "serif" ? .system(.body, design: .serif) : .body
         }
         if let weight = fontWeight {
             font = font.weight(fontWeightValue(weight))
@@ -491,7 +521,6 @@ extension ViewStyle {
         if let family = fontFamily {
             switch family {
             case "mono":  font = font.monospaced()
-            case "serif": font = font.serif()
             default: break  // "sans" = system default
             }
         }

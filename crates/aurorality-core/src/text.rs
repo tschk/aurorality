@@ -8,10 +8,10 @@
 /// - anything else (including `""`) → returned unchanged
 pub fn transform_text(content: &str, transform: &str) -> String {
     match transform {
-        "uppercase"  => content.to_uppercase(),
-        "lowercase"  => content.to_lowercase(),
+        "uppercase" => content.to_uppercase(),
+        "lowercase" => content.to_lowercase(),
         "capitalize" => capitalize_words(content),
-        _            => content.to_string(),
+        _ => content.to_string(),
     }
 }
 

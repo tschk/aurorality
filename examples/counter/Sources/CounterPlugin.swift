@@ -17,7 +17,9 @@ final class CounterPlugin: AurorPlugin {
             throw AurorPluginError("unknown method: \(method)")
         }
         let result: [String: Any] = ["count": count]
-        let data = try JSONSerialization.data(withJSONObject: result)
-        return String(data: data, encoding: .utf8)!
+        guard let data = try? JSONSerialization.data(withJSONObject: result),
+              let json = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return json
     }
 }

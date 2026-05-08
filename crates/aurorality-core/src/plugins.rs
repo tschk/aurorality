@@ -27,7 +27,12 @@ impl NativePlugin for CorePlugin {
     }
 
     fn methods(&self) -> Vec<String> {
-        vec!["echo".into(), "ping".into(), "timestamp".into(), "randomU32".into()]
+        vec![
+            "echo".into(),
+            "ping".into(),
+            "timestamp".into(),
+            "randomU32".into(),
+        ]
     }
 
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
@@ -109,19 +114,16 @@ impl NativePlugin for StatsPlugin {
     }
 
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
-        let text = payload
-            .get("text")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
 
         match method {
             "analyze" => {
                 let char_count = text.chars().count();
-                let line_count = text.lines().count().max(if text.is_empty() { 0 } else { 1 });
-                let words: Vec<&str> = text
-                    .split_whitespace()
-                    .filter(|w| !w.is_empty())
-                    .collect();
+                let line_count = text
+                    .lines()
+                    .count()
+                    .max(if text.is_empty() { 0 } else { 1 });
+                let words: Vec<&str> = text.split_whitespace().filter(|w| !w.is_empty()).collect();
                 let word_count = words.len();
 
                 // frequency count

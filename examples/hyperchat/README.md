@@ -54,6 +54,24 @@ cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- swiftgen \
 
 Then run `brisk build` or `brisk run`.
 
+## Dev overlay + hybrid reload
+
+Set `AURORALITY_DEV=1` and run from the Aurorality repo:
+
+```bash
+cargo run -p aurorality-cli -- dev examples/hyperchat/views \
+  --swiftgen-view examples/hyperchat/views/main.crepus \
+  --swiftgen-out examples/hyperchat/Generated \
+  --swiftgen-name HyperChatGeneratedView \
+  --swiftgen-context-type HyperChatContext
+```
+
+Brisk’s rebuild loop picks up regenerated `HyperChatGeneratedView.swift`; the overlay shows swiftgen/IR status immediately.
+
+## Persistence
+
+Conversation transcripts and UI prefs are snapshotted via **`aurorStore*`** (`HyperChatModel`) under the app’s bundle id.
+
 ## Protocols
 
 Matrix uses the Matrix Client-Server API:
@@ -82,7 +100,7 @@ Bitchat is a mesh fallback in the demo UI. There is no linkable Swift library fo
 - `views/main.crepus` — primary UI (Tailwind-style classes + native tags like `list`; mapped by `swiftgen` to SwiftUI).
 - `Generated/HyperChatGeneratedView.swift` — generated; do not edit by hand.
 - `Sources/HyperChatDevConnectView.swift` — connect sheet for `aurorality dev` (host/port + status).
-- `Sources/App.swift` — scene + shared **`AurorBridge`** (with Matrix/Stalwart Rust plugins) launching **`HyperChatGeneratedView`**.
+- `Sources/App.swift` — **`HyperChatGeneratedView`** + **`HyperChatGeneratedViewCommands`** (from `.crepus` `menubar`), **`AurorDevOverlay`** for optional HUD against `aurorality dev`, sheet-based Settings, focus hooks for polling/notifications.
 - `rust-backend/` — **`hyperchat-backend`** Rust crate: [eqswift **0.1.1** on crates.io](https://crates.io/crates/eqswift) + UniFFI exports (`matrix_health_json`, `stalwart_health_json`, etc.). Build: `cargo build -p hyperchat-backend` from the repo root.
 - `Generated/hyperchat_backend.swift`, `FFI/` — UniFFI output for Swift (regenerated in `[pre_build]` via `uniffi-bindgen` on `libhyperchat_backend.dylib`; optional [`cargo-eqswift`](https://crates.io/crates/cargo-eqswift): `cargo eqswift swift` from `rust-backend`).
 - `.brisk.toml` — `pre_build` (Rust, UniFFI, swiftgen, copy sources), `app.embedded_dylibs` (Rust dylib inside `.app`).

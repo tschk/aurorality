@@ -8,8 +8,7 @@ use serde_json::{json, Value};
 /// Apply a JSON-encoded `IrMutation[]` to a JSON-encoded `ViewIr`.
 /// Returns the updated `ViewIr` JSON string.
 pub fn apply(ir_json: &str, mutations_json: &str) -> Result<String, String> {
-    let mut ir: Value =
-        serde_json::from_str(ir_json).map_err(|e| format!("bad IR JSON: {e}"))?;
+    let mut ir: Value = serde_json::from_str(ir_json).map_err(|e| format!("bad IR JSON: {e}"))?;
     let mutations: Value =
         serde_json::from_str(mutations_json).map_err(|e| format!("bad mutations JSON: {e}"))?;
 
@@ -26,9 +25,7 @@ pub fn apply(ir_json: &str, mutations_json: &str) -> Result<String, String> {
 
 fn apply_one(ir: &mut Value, m: &Value) -> Result<(), String> {
     let op = m["op"].as_str().unwrap_or("");
-    let root = ir["root"]
-        .as_array_mut()
-        .ok_or("IR missing root array")?;
+    let root = ir["root"].as_array_mut().ok_or("IR missing root array")?;
 
     match op {
         "replaceRoot" => {
@@ -80,7 +77,11 @@ fn int_path(m: &Value) -> Result<Vec<usize>, String> {
 fn int_path_field(m: &Value, field: &str) -> Result<Vec<usize>, String> {
     m.get(field)
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().map(|n| n.as_u64().unwrap_or(0) as usize).collect())
+        .map(|arr| {
+            arr.iter()
+                .map(|n| n.as_u64().unwrap_or(0) as usize)
+                .collect()
+        })
         .ok_or_else(|| format!("mutation missing or invalid {field:?}"))
 }
 
@@ -94,7 +95,9 @@ fn int_path_field(m: &Value, field: &str) -> Result<Vec<usize>, String> {
 #[allow(clippy::ptr_arg)]
 fn replace_at(nodes: &mut Vec<Value>, path: &[usize], replacement: Value) {
     let Some(&first) = path.first() else { return };
-    if first >= nodes.len() { return }
+    if first >= nodes.len() {
+        return;
+    }
     if path.len() == 1 {
         nodes[first] = replacement;
     } else {
@@ -102,6 +105,9 @@ fn replace_at(nodes: &mut Vec<Value>, path: &[usize], replacement: Value) {
             .as_array_mut()
             .map(|c| c as *mut Vec<Value>);
         if let Some(children) = children {
+            // SAFETY: The raw pointer derives from an `&mut Vec<Value>` obtained
+            // via `as_array_mut()`. We follow a single path through the tree,
+            // never creating aliasing mutable references to the same Vec.
             replace_at(unsafe { &mut *children }, &path[1..], replacement);
         }
     }
@@ -113,19 +119,27 @@ fn insert_at(nodes: &mut Vec<Value>, parent_path: &[usize], idx: usize, node: Va
         nodes.insert(safe_idx, node);
         return;
     }
-    let Some(&first) = parent_path.first() else { return };
-    if first >= nodes.len() { return }
+    let Some(&first) = parent_path.first() else {
+        return;
+    };
+    if first >= nodes.len() {
+        return;
+    }
     let children = nodes[first]["children"]
         .as_array_mut()
         .map(|c| c as *mut Vec<Value>);
     if let Some(children) = children {
+        // SAFETY: Same pattern as replace_at — single path through the tree,
+        // no aliasing mutable references.
         insert_at(unsafe { &mut *children }, &parent_path[1..], idx, node);
     }
 }
 
 fn remove_at(nodes: &mut Vec<Value>, path: &[usize]) {
     let Some(&first) = path.first() else { return };
-    if first >= nodes.len() { return }
+    if first >= nodes.len() {
+        return;
+    }
     if path.len() == 1 {
         nodes.remove(first);
         return;
@@ -134,6 +148,7 @@ fn remove_at(nodes: &mut Vec<Value>, path: &[usize]) {
         .as_array_mut()
         .map(|c| c as *mut Vec<Value>);
     if let Some(children) = children {
+        // SAFETY: Same pattern — single path, no aliasing mutable references.
         remove_at(unsafe { &mut *children }, &path[1..]);
     }
 }
@@ -141,7 +156,9 @@ fn remove_at(nodes: &mut Vec<Value>, path: &[usize]) {
 #[allow(clippy::ptr_arg)]
 fn update_field_at(nodes: &mut Vec<Value>, path: &[usize], field: &str, value: Value) {
     let Some(&first) = path.first() else { return };
-    if first >= nodes.len() { return }
+    if first >= nodes.len() {
+        return;
+    }
     if path.len() == 1 {
         nodes[first][field] = value;
         return;
@@ -150,6 +167,7 @@ fn update_field_at(nodes: &mut Vec<Value>, path: &[usize], field: &str, value: V
         .as_array_mut()
         .map(|c| c as *mut Vec<Value>);
     if let Some(children) = children {
+        // SAFETY: Same pattern — single path, no aliasing mutable references.
         update_field_at(unsafe { &mut *children }, &path[1..], field, value);
     }
 }

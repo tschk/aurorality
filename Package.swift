@@ -1,6 +1,8 @@
 // swift-tools-version:5.9
 import PackageDescription
 
+let rustLibDir = "/Users/undivisible/projects/aurorality/target/debug"
+
 // NOTE: Run `cargo build -p aurorality-core` and the uniffi-bindgen step before
 // opening this package. The generated/ directory must contain:
 //   aurorality_core.swift, aurorality_coreFFI.h, aurorality_coreFFI.modulemap
@@ -25,16 +27,37 @@ let package = Package(
             path: ".",
             exclude: [
                 "Cargo.toml",
+                "Cargo.lock",
+                "AGENTS.md",
+                "LICENSE",
+                "README.md",
+                "ROADMAP.md",
                 "crates",
                 "examples",
                 "runner",
+                "swift/Tests",
+                "target",
                 ".brisk.toml",
                 "generated/aurorality_coreFFI.h",
                 "generated/aurorality_coreFFI.modulemap",
+                "generated/eqswift.swift",
+                "generated/eqswiftFFI.h",
+                "generated/eqswiftFFI.modulemap",
             ],
             sources: [
                 "generated/aurorality_core.swift",
                 "swift/Sources/Aurorality",
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L", rustLibDir])
+            ]
+        ),
+        .testTarget(
+            name: "AuroralityTests",
+            dependencies: ["Aurorality"],
+            path: "swift/Tests/AuroralityTests",
+            linkerSettings: [
+                .unsafeFlags(["-L", rustLibDir])
             ]
         ),
     ]

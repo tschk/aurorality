@@ -1,8 +1,10 @@
 div flex flex-col gap-6 p-8
   span text-3xl font-bold
-    "Hello from aurorality"
+    "{headline}"
   span text-base
-    "Edit this file and watch SwiftUI update live in the Runner app."
+    "{detail}"
   div flex flex-row gap-2
-    span text-sm
-      "Built with .crepus + SwiftUI + Rust"
+    span text-sm font-semibold text-green-500
+      "{badge}"
+    span text-sm text-zinc-500
+      "{sessionOwner}: {sessionMode}"

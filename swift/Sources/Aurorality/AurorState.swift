@@ -56,6 +56,8 @@ public final class AurorState {
             }
         case .error:
             error = message.message
+        case .devHello, .swiftgenStatus:
+            break
         }
     }
 }

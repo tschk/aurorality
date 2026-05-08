@@ -352,7 +352,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles.
+// Initial value and increment amount for handles. 
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -493,9 +493,9 @@ public struct ResolvedColor: Equatable, Hashable {
         self.a = a
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -509,9 +509,9 @@ public struct FfiConverterTypeResolvedColor: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResolvedColor {
         return
             try ResolvedColor(
-                r: FfiConverterFloat.read(from: &buf),
-                g: FfiConverterFloat.read(from: &buf),
-                b: FfiConverterFloat.read(from: &buf),
+                r: FfiConverterFloat.read(from: &buf), 
+                g: FfiConverterFloat.read(from: &buf), 
+                b: FfiConverterFloat.read(from: &buf), 
                 a: FfiConverterFloat.read(from: &buf)
         )
     }
@@ -542,8 +542,8 @@ public func FfiConverterTypeResolvedColor_lower(_ value: ResolvedColor) -> RustB
 
 public enum AurorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-
-
+    
+    
     case RenderError(message: String
     )
     case InvalidContext(message: String
@@ -551,15 +551,15 @@ public enum AurorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case PluginError(message: String
     )
 
+    
 
+    
 
-
-
-
+    
     public var errorDescription: String? {
         String(reflecting: self)
     }
-
+    
 }
 
 #if compiler(>=6)
@@ -576,9 +576,9 @@ public struct FfiConverterTypeAurorError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
+        
 
-
-
+        
         case 1: return .RenderError(
             message: try FfiConverterString.read(from: &buf)
             )
@@ -596,24 +596,24 @@ public struct FfiConverterTypeAurorError: FfiConverterRustBuffer {
     public static func write(_ value: AurorError, into buf: inout [UInt8]) {
         switch value {
 
+        
 
-
-
-
+        
+        
         case let .RenderError(message):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(message, into: &buf)
-
-
+            
+        
         case let .InvalidContext(message):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(message, into: &buf)
-
-
+            
+        
         case let .PluginError(message):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(message, into: &buf)
-
+            
         }
     }
 }
@@ -668,6 +668,10 @@ public func applyMutations(irJson: String, mutationsJson: String)throws  -> Stri
     )
 })
 }
+/**
+ * Load or replace a JavaScript plugin (JSC). When `aurorality_core` is built without the
+ * `js` feature, this returns an error — the Swift bindings still link.
+ */
 public func jsLoadPlugin(id: String, code: String)throws   {try rustCallWithError(FfiConverterTypeAurorError_lift) {
     uniffi_aurorality_core_fn_func_js_load_plugin(
         FfiConverterString.lower(id),
@@ -745,7 +749,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_aurorality_core_checksum_func_apply_mutations() != 30298) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_aurorality_core_checksum_func_js_load_plugin() != 57540) {
+    if (uniffi_aurorality_core_checksum_func_js_load_plugin() != 52216) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_aurorality_core_checksum_func_plugin_invoke() != 42552) {

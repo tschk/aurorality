@@ -19,7 +19,11 @@ pub struct BundleConfig {
 pub fn run(config: BundleConfig) -> Result<()> {
     // 1. Bundle JS if an entry is given
     if let Some(ref entry) = config.js_entry {
-        println!("bundling JS: {} → {}", entry.display(), config.js_out.display());
+        println!(
+            "bundling JS: {} → {}",
+            entry.display(),
+            config.js_out.display()
+        );
         bundle_js(entry, &config.js_out, &config.bundler)
             .with_context(|| format!("JS bundle failed (bundler={})", config.bundler))?;
         println!("  JS bundle ok");

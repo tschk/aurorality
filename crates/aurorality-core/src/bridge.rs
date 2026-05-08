@@ -6,6 +6,8 @@ use std::sync::{Arc, OnceLock, RwLock};
 use serde_json::{json, Value};
 
 use crate::plugins::{AppPlugin, CorePlugin, StatsPlugin};
+use crate::transport::matrix::MatrixClient;
+use crate::transport::stalwart::StalwartClient;
 use crate::AurorError;
 
 pub trait NativePlugin: Send + Sync {
@@ -27,6 +29,10 @@ impl Bridge {
         plugins.insert(app.id(), app);
         let stats: Arc<dyn NativePlugin> = Arc::new(StatsPlugin);
         plugins.insert(stats.id(), stats);
+        let stalwart: Arc<dyn NativePlugin> = Arc::new(StalwartClient::from_env());
+        plugins.insert(stalwart.id(), stalwart);
+        let matrix: Arc<dyn NativePlugin> = Arc::new(MatrixClient::from_env());
+        plugins.insert(matrix.id(), matrix);
         Self { plugins }
     }
 
@@ -82,10 +88,14 @@ pub fn register_plugin(plugin: Arc<dyn NativePlugin>) {
 
 /// Invoke a plugin via the global bridge and return the JSON envelope string.
 pub fn invoke(plugin_id: &str, method: &str, payload_json: &str) -> Result<String, AurorError> {
-    let payload: Value = serde_json::from_str(payload_json).map_err(|e| AurorError::InvalidContext {
-        message: format!("invalid payload JSON: {e}"),
-    })?;
-    let result = global_bridge().read().unwrap().invoke_envelope(plugin_id, method, &payload);
+    let payload: Value =
+        serde_json::from_str(payload_json).map_err(|e| AurorError::InvalidContext {
+            message: format!("invalid payload JSON: {e}"),
+        })?;
+    let result = global_bridge()
+        .read()
+        .unwrap()
+        .invoke_envelope(plugin_id, method, &payload);
     serde_json::to_string(&result).map_err(|e| AurorError::RenderError {
         message: e.to_string(),
     })

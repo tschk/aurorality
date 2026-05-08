@@ -46,8 +46,10 @@ final class HistoryPlugin: AurorPlugin {
     }
 
     private func encode(_ value: Any) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: value)
-        return String(data: data, encoding: .utf8)!
+        guard let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return json
     }
 }
 

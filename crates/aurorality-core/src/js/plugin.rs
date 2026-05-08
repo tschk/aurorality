@@ -12,9 +12,9 @@ use crate::bridge::NativePlugin;
 use super::runtime::JscRuntime;
 
 pub struct JsPlugin {
-    plugin_id:        String,
+    plugin_id: String,
     exported_methods: Vec<String>,
-    runtime:          Arc<Mutex<JscRuntime>>,
+    runtime: Arc<Mutex<JscRuntime>>,
 }
 
 impl JsPlugin {
@@ -30,9 +30,9 @@ impl JsPlugin {
         rt.install_bridge_callback();
         rt.load_code(code)?;
         Ok(Self {
-            plugin_id:        id.to_string(),
+            plugin_id: id.to_string(),
             exported_methods: methods,
-            runtime:          Arc::new(Mutex::new(rt)),
+            runtime: Arc::new(Mutex::new(rt)),
         })
     }
 }
@@ -47,8 +47,7 @@ impl NativePlugin for JsPlugin {
     }
 
     fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
-        let payload_str = serde_json::to_string(payload)
-            .unwrap_or_else(|_| "{}".to_string());
+        let payload_str = serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string());
         let result_str = self
             .runtime
             .lock()

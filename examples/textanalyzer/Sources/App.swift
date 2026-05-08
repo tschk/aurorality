@@ -82,7 +82,10 @@ struct AnalyzerView: View {
 
             Spacer()
         }
-        .task { loadTemplate() }
+        .task {
+            try? loadScriptPlugin(id: "textJs", script: "backend")
+            loadTemplate()
+        }
     }
 
     // MARK: - Actions
@@ -92,8 +95,7 @@ struct AnalyzerView: View {
 
         // 1. Call the Rust StatsPlugin to compute statistics.
         let payload = encodePayload(["text": inputText])
-        guard let statsJson = try? bridge.invoke(pluginId: "stats", method: "analyze", payload: payload),
-              let result = decode(StatsResult.self, from: statsJson)
+        guard let result = try? bridge.invokeData(pluginId: "stats", method: "analyze", payload: payload, as: StatsResult.self)
         else { return }
         stats = result
 
@@ -113,29 +115,36 @@ struct AnalyzerView: View {
     }
 
     private func rerender(stats: StatsResult) {
-        let url = Bundle.main.url(forResource: "main", withExtension: "crepus")!
-        let template = try! String(contentsOf: url)
-
-        let historyContext: [String: ContextValue] = [:]
-        let historyList: [[String: ContextValue]] = history.map { item in
-            ["preview": .string(item.preview), "words": .int(item.words)]
-        }
+let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
+        let js = (try? bridge.invokeData(
+            pluginId: "textJs",
+            method: "score",
+            payload: encodePayload(["wordCount": stats.wordCount, "charCount": stats.charCount]),
+            as: TextScore.self
+        )) ?? TextScore(density: 0, readability: "unknown", summary: "waiting for JavaScript scoring")
 
         try? state.load(template: template, context: [
             "wordCount": .int(stats.wordCount),
             "charCount": .int(stats.charCount),
             "topWord":   .string(stats.topWord.isEmpty ? "—" : stats.topWord),
+            "density":   .int(js.density),
+            "readability": .string(js.readability),
+            "summary":   .string(js.summary),
             "history":   .list(history.map { ["preview": .string($0.preview), "words": .int($0.words)] }),
         ])
     }
 
     private func loadTemplate() {
-        let url = Bundle.main.url(forResource: "main", withExtension: "crepus")!
-        let template = try! String(contentsOf: url)
+let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         try? state.load(template: template, context: [
             "wordCount": .int(0),
             "charCount": .int(0),
             "topWord":   .string("—"),
+            "density":   .int(0),
+            "readability": .string("waiting"),
+            "summary":   .string("JavaScript scoring appears after the first analysis"),
             "history":   .list([]),
         ])
     }
@@ -143,11 +152,26 @@ struct AnalyzerView: View {
     // MARK: - Helpers
 
     private func encodePayload(_ dict: [String: Any]) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: dict)
-        return String(data: data, encoding: .utf8)!
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let json = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return json
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from json: String) -> T? {
         try? JSONDecoder().decode(type, from: Data(json.utf8))
     }
+
+    private func loadScriptPlugin(id: String, script: String) throws {
+        guard let url = Bundle.main.url(forResource: script, withExtension: "js", subdirectory: "scripts") else {
+            throw AurorPluginError("missing scripts/\(script).js")
+        }
+        try loadJsPlugin(id: id, code: String(contentsOf: url, encoding: .utf8))
+    }
+}
+
+struct TextScore: Decodable {
+    let density: Int
+    let readability: String
+    let summary: String
 }

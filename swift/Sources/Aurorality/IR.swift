@@ -12,12 +12,24 @@ public struct ViewIr: Codable, Equatable {
     public static let empty = ViewIr(version: 2, root: [])
 }
 
+// MARK: - Picker option (IR)
+
+public struct PickerOptionIr: Codable, Equatable {
+    public var value: String
+    public var label: String
+
+    public init(value: String, label: String) {
+        self.value = value
+        self.label = label
+    }
+}
+
 // MARK: - ViewNode
 
 /// Flat Codable struct matching the serde `#[serde(tag = "kind")]` enum.
 public struct ViewNode: Codable, Equatable {
     public enum Kind: String, Codable {
-        case text, stack, button, image, scroll, slotRotate
+        case text, stack, button, image, scroll, slotRotate, input, picker
     }
 
     public let kind: Kind
@@ -43,6 +55,14 @@ public struct ViewNode: Codable, Equatable {
     // slotRotate
     public var phrases: [String]?
     public var intervalMs: UInt64?
+
+    // input
+    public var bind: String?
+    public var placeholder: String?
+    public var multiline: Bool?
+
+    // picker
+    public var options: [PickerOptionIr]?
 
     // shared
     public var style: ViewStyle?
@@ -149,12 +169,32 @@ public struct HotReloadEnvelope: Codable {
 public struct HotReloadMessage: Codable {
     public enum Kind: String, Codable {
         case noop, patch, fullReload, error
+        case devHello
+        case swiftgenStatus
     }
+
     public let kind: Kind
     public var mutations: [IrMutation]?
     public var ir: ViewIr?
     public var reason: String?
     public var message: String?
+
+    /// [`HotReloadMessage::DevHello`] (`kind == .devHello`).
+    public var sessionId: String?
+    public var watchDir: String?
+    public var swiftgenView: String?
+    public var swiftgenOut: String?
+    public var swiftgenViewName: String?
+    public var swiftgenContextType: String?
+    public var irEnabled: Bool?
+
+    /// [`HotReloadMessage::SwiftgenStatus`] (`kind == .swiftgenStatus`).
+    public var ok: Bool?
+    public var errors: [String]?
+    /// Same JSON field as `swiftgenViewName` above but used only for swiftgen status (`view_name`).
+    public var viewName: String?
+    public var outputPath: String?
+    public var tsMs: UInt64?
 }
 
 // MARK: - IrMutation

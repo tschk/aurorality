@@ -6,21 +6,41 @@ version = "0.1.0"
 bundle_id = "dev.aurorality.example.hyperchat"
 deployment_target = "15.0"
 sources = ".brisk-sources"
-resources = ["views", "scripts"]
-linker_flags = ["-I.brisk-sources", "-L../../target/debug", "-laurorality_core", "-framework", "JavaScriptCore"]
+resources = ["views"]
+embedded_dylibs = [
+    "../../target/debug/libaurorality_core.dylib",
+    "../../target/debug/libhyperchat_backend.dylib",
+]
+linker_flags = [
+    "-I.brisk-sources",
+    "-I.brisk-sources/FFI",
+    "-L../../target/debug",
+    "-laurorality_core",
+    "-lhyperchat_backend",
+    "-framework",
+    "JavaScriptCore",
+]
 
 [pre_build]
 commands = [
+    "cargo build -p hyperchat-backend --manifest-path ../../Cargo.toml",
     "cargo build -p aurorality-core --features js --manifest-path ../../Cargo.toml",
     "cargo run --manifest-path ../../Cargo.toml -p aurorality-core --features js --bin uniffi-bindgen generate --library ../../target/debug/libaurorality_core.dylib --language swift --out-dir ../../generated",
     "cp ../../generated/aurorality_coreFFI.modulemap ../../generated/module.modulemap",
+    "cargo run --manifest-path ../../Cargo.toml -p hyperchat-backend --bin uniffi-bindgen generate --library ../../target/debug/libhyperchat_backend.dylib --language swift --out-dir Generated",
+    "cp -f Generated/hyperchat_backendFFI.h FFI/hyperchat_backendFFI.h",
+    "rm -f Generated/hyperchat_backendFFI.h Generated/hyperchat_backendFFI.modulemap",
+    "cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- swiftgen --view views/main.crepus --out Generated --view-name HyperChatGeneratedView --context-type HyperChatContext",
     "rm -rf .brisk-sources",
-    "mkdir -p .brisk-sources",
+    "mkdir -p .brisk-sources/FFI",
     "cp Sources/*.swift .brisk-sources/",
+    "cp Generated/*.swift .brisk-sources/",
     "cp ../../swift/Sources/Aurorality/*.swift .brisk-sources/",
     "rm -f .brisk-sources/AuroralityCoreApi.swift",
     "cp ../../generated/aurorality_core.swift .brisk-sources/",
     "cp ../../generated/aurorality_coreFFI.h .brisk-sources/",
     "cp ../../generated/aurorality_coreFFI.modulemap .brisk-sources/module.modulemap",
-    "aurorality build --watch views --out ../../generated/ir"
+    "cp FFI/hyperchat_backendFFI.h .brisk-sources/FFI/",
+    "cp FFI/module.modulemap .brisk-sources/FFI/module.modulemap",
+    "cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- build --watch views --out views"
 ]
