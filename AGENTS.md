@@ -47,7 +47,7 @@ aurorality/
 
 The canonical IR lives in `crepuscularity-native/src/ir.rs`:
 
-- `ViewIr` — `{ version: 2, root: [ViewNode] }`
+- `ViewIr` — `{ version: 3, root: [ViewNode] }`
 - `ViewNode` — tagged enum: `text`, `stack`, `button`, `image`, `scroll`, `slotRotate`
 - `ViewStyle` — 40+ CSS properties (padding, margin, sizing, typography, color, border, flex)
 

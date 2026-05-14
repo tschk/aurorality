@@ -133,7 +133,7 @@ mod tests {
         let template = "\"Hello, world!\"";
         let result = render_template(template.to_string(), "{}".to_string()).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["version"], 2);
+        assert_eq!(v["version"], 3);
         assert_eq!(v["root"][0]["kind"], "text");
         assert_eq!(v["root"][0]["content"], "Hello, world!");
     }
@@ -145,7 +145,7 @@ mod tests {
         let ctx = r#"{"name": "Aurorality"}"#;
         let result = render_template(template.to_string(), ctx.to_string()).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["version"], 2);
+        assert_eq!(v["version"], 3);
         assert!(v["root"].is_array());
     }
 

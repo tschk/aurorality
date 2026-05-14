@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "root": [
     {
       "kind": "stack",
@@ -265,7 +265,7 @@
                     {
                       "kind": "button",
                       "label": "Send",
-                      "on_click": "send"
+                      "onClick": "send"
                     }
                   ]
                 }

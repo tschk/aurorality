@@ -9,7 +9,7 @@ public struct ViewIr: Codable, Equatable {
     public let version: Int
     public let root: [ViewNode]
 
-    public static let empty = ViewIr(version: 2, root: [])
+    public static let empty = ViewIr(version: 3, root: [])
 }
 
 // MARK: - Picker option (IR)
