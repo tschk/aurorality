@@ -81,15 +81,20 @@ mod tests {
 
     #[test]
     fn tailwind_palette() {
-        // slate-500 = #64748b — Tailwind v3 palette via crepuscularity_native
+        // Ensure wrapper stays aligned with upstream native resolver.
         let c = resolve_color("slate-500").unwrap();
-        assert!((c.r - 0x64 as f32 / 255.0).abs() < 0.01);
-        assert!((c.g - 0x74 as f32 / 255.0).abs() < 0.01);
-        assert!((c.b - 0x8b as f32 / 255.0).abs() < 0.01);
+        let [r, g, b, a] = crepuscularity_native::resolve_rgba("slate-500").unwrap();
+        assert!((c.r - r).abs() < 0.0001);
+        assert!((c.g - g).abs() < 0.0001);
+        assert!((c.b - b).abs() < 0.0001);
+        assert!((c.a - a).abs() < 0.0001);
         assert_eq!(c.a, 1.0);
 
-        // red-500 = #ef4444
         let c2 = resolve_color("red-500").unwrap();
-        assert!((c2.r - 0xef as f32 / 255.0).abs() < 0.01);
+        let [r2, g2, b2, a2] = crepuscularity_native::resolve_rgba("red-500").unwrap();
+        assert!((c2.r - r2).abs() < 0.0001);
+        assert!((c2.g - g2).abs() < 0.0001);
+        assert!((c2.b - b2).abs() < 0.0001);
+        assert!((c2.a - a2).abs() < 0.0001);
     }
 }
