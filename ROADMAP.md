@@ -54,21 +54,21 @@
 - [ ] Swift: Apply via .transformEffect()
 
 ### Box Shadow
-- [ ] Add shadow fields: shadow_color, shadow_radius, shadow_offset
-- [ ] Add parsers: shadow-sm, shadow-md, shadow-lg, shadow-xl
+- [x] Add shadow fields: shadow_color, shadow_radius, shadow_offset
+- [x] Add parsers: shadow-sm, shadow-md, shadow-lg, shadow-xl
 
 ### Gradients
-- [ ] Add background_gradient with from/to/stop colors
-- [ ] Add parsers: bg-gradient-to-r, from-blue-500, to-red-500
+- [x] Add background gradient direction + from/to colors
+- [x] Add parsers: bg-gradient-to-r, from-blue-500, to-red-500
 
 ### Text Overflow
-- [ ] Add text_overflow: "clip" | "ellipsis" | "truncate"
-- [ ] Add white_space: "normal" | "nowrap" | "pre"
-- [ ] Add line_clamp-N for truncation
+- [x] Add text_overflow: "clip" | "ellipsis" | "truncate"
+- [x] Add white_space: "normal" | "nowrap" | "pre"
+- [x] Add line_clamp-N for truncation
 
 ### Cursor & Selection
-- [ ] Add cursor: "auto" | "default" | "pointer" | "text"
-- [ ] Add user_select: "auto" | "none" | "text" | "all"
+- [x] Add cursor: "auto" | "default" | "pointer" | "text"
+- [x] Add user_select: "auto" | "none" | "text" | "all"
 
 ---
 
@@ -111,8 +111,8 @@
 - [ ] Button variants: filled, outlined, text
 
 ### Image
-- [ ] object_fit: "contain" | "cover" | "fill" | "scale"
-- [ ] placeholder for loading
+- [x] object_fit / object_position
+- [x] placeholder for loading
 
 ### Scroll
 - [ ] always bounce option
