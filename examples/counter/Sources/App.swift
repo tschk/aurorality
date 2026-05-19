@@ -16,6 +16,11 @@ struct CounterApp: App {
         WindowGroup {
             CounterView(state: state, bridge: bridge, count: $count)
                 .environment(bridge)
+                .environment(
+                    \.aurorDevEnabled,
+                    ProcessInfo.processInfo.environment["AURORALITY_DEV"] == "1"
+                )
+                .aurorDevOverlay(templatePath: "views/main.crepus")
                 .task { loadTemplate() }
         }
     }

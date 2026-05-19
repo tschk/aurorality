@@ -14,6 +14,11 @@ struct BasicApp: App {
         WindowGroup {
             AurorRootView(state: state)
                 .environment(bridge)
+                .environment(
+                    \.aurorDevEnabled,
+                    ProcessInfo.processInfo.environment["AURORALITY_DEV"] == "1"
+                )
+                .aurorDevOverlay(templatePath: "views/main.crepus")
                 .task { load() }
         }
     }
