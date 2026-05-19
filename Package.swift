@@ -49,7 +49,7 @@ let package = Package(
                 "swift/Sources/Aurorality",
             ],
             linkerSettings: [
-                .unsafeFlags(["-L", rustLibDir])
+                .unsafeFlags(["-L", rustLibDir, "-laurorality_core"])
             ]
         ),
         .testTarget(
@@ -57,7 +57,7 @@ let package = Package(
             dependencies: ["Aurorality"],
             path: "swift/Tests/AuroralityTests",
             linkerSettings: [
-                .unsafeFlags(["-L", rustLibDir])
+                .unsafeFlags(["-L", rustLibDir, "-laurorality_core"])
             ]
         ),
     ]
