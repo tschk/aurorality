@@ -69,8 +69,11 @@ struct AurorNodeView: View {
     private var stackView: some View {
         let children = node.children ?? []
         let spacing = node.spacing.map(CGFloat.init)
+        
+        // Use flexDirection from style if available, otherwise use axis
+        let direction = node.style?.flexDirection ?? node.axis
 
-        if node.axis == "row" {
+        if direction == "row" {
             HStack(alignment: hAlignment, spacing: spacing) {
                 childViews(children)
             }
@@ -125,16 +128,26 @@ struct AurorNodeView: View {
         if let src = node.src {
             if src.hasPrefix("http://") || src.hasPrefix("https://") {
                 AsyncImage(url: URL(string: src)) { image in
-                    image.resizable().scaledToFit()
+                    image
+                        .resizable()
+                        .auroraImageFit(node.style)
+                        .auroraImagePosition(node.style)
                 } placeholder: {
-                    ProgressView()
+                    if let placeholder = node.placeholder, !placeholder.isEmpty {
+                        Text(placeholder)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                    }
                 }
                 .auroraContainerStyle(node.style)
                 .auroraLayout(node.style)
             } else {
                 Image(src)
                     .resizable()
-                    .scaledToFit()
+                    .auroraImageFit(node.style)
+                    .auroraImagePosition(node.style)
                     .auroraContainerStyle(node.style)
                     .auroraLayout(node.style)
             }
@@ -287,13 +300,13 @@ struct AurorContainerStyleModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let cornerR = CGFloat(style?.cornerRadius ?? 0)
-        let bg = style?.swiftBackgroundColor ?? .clear
+        let bgStyle = style?.swiftBackgroundShapeStyle ?? AnyShapeStyle(Color.clear)
         let borderW = CGFloat(style?.borderWidth ?? 0)
         let borderC = style?.borderColor.flatMap(Color.init(cssString:)) ?? .clear
 
         content
             .padding(style?.swiftEdgeInsets ?? .init())
-            .background(bg)
+            .background(bgStyle)
             .clipShape(RoundedRectangle(cornerRadius: cornerR))
             .overlay(
                 borderW > 0
@@ -333,6 +346,31 @@ struct AurorLayoutModifier: ViewModifier {
 // MARK: - Frame helpers
 
 private extension View {
+    @ViewBuilder
+    func auroraImageFit(_ style: ViewStyle?) -> some View {
+        switch style?.objectFit {
+        case "cover":
+            self.aspectRatio(contentMode: .fill).clipped()
+        case "fill":
+            self.aspectRatio(contentMode: .fill)
+        case "none":
+            self
+        case "scale-down", "contain":
+            self.aspectRatio(contentMode: .fit)
+        default:
+            self.aspectRatio(contentMode: .fit)
+        }
+    }
+
+    @ViewBuilder
+    func auroraImagePosition(_ style: ViewStyle?) -> some View {
+        if let alignment = style?.swiftObjectAlignment {
+            self.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        } else {
+            self
+        }
+    }
+
     /// `.frame()` from width/height/min/max sizing fields.
     @ViewBuilder
     func auroraFrame(_ style: ViewStyle?) -> some View {
@@ -535,6 +573,24 @@ extension ViewStyle {
         backgroundColor.flatMap(Color.init(cssString:))
     }
 
+    var swiftBackgroundGradient: LinearGradient? {
+        guard
+            let from = backgroundGradientFrom.flatMap(Color.init(cssString:)),
+            let to = backgroundGradientTo.flatMap(Color.init(cssString:))
+        else {
+            return nil
+        }
+        let points = swiftGradientPoints
+        return LinearGradient(colors: [from, to], startPoint: points.start, endPoint: points.end)
+    }
+
+    var swiftBackgroundShapeStyle: AnyShapeStyle {
+        if let gradient = swiftBackgroundGradient {
+            return AnyShapeStyle(gradient)
+        }
+        return AnyShapeStyle(swiftBackgroundColor ?? .clear)
+    }
+
     var swiftTextAlignment: TextAlignment {
         switch textAlign {
         case "center":            return .center
@@ -550,6 +606,34 @@ extension ViewStyle {
             bottom:   CGFloat(paddingBottom ?? paddingVertical   ?? padding ?? 0),
             trailing: CGFloat(paddingRight  ?? paddingHorizontal ?? padding ?? 0)
         )
+    }
+
+    var swiftObjectAlignment: Alignment? {
+        switch objectPosition {
+        case "center":       return .center
+        case "top":          return .top
+        case "bottom":       return .bottom
+        case "left":         return .leading
+        case "right":        return .trailing
+        case "left-top":     return .topLeading
+        case "left-bottom":  return .bottomLeading
+        case "right-top":    return .topTrailing
+        case "right-bottom": return .bottomTrailing
+        default:             return nil
+        }
+    }
+
+    var swiftGradientPoints: (start: UnitPoint, end: UnitPoint) {
+        switch backgroundGradientDirection {
+        case "to-l":  return (.trailing, .leading)
+        case "to-t":  return (.bottom, .top)
+        case "to-b":  return (.top, .bottom)
+        case "to-tr": return (.bottomLeading, .topTrailing)
+        case "to-tl": return (.bottomTrailing, .topLeading)
+        case "to-br": return (.topLeading, .bottomTrailing)
+        case "to-bl": return (.topTrailing, .bottomLeading)
+        default:      return (.leading, .trailing) // includes "to-r"
+        }
     }
 
     /// Line spacing in points from a multiplier. Uses system body line height (~20pt) as base.

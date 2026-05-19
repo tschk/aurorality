@@ -89,6 +89,25 @@ final class ViewStyleTests: XCTestCase {
         XCTAssertEqual(s.userSelect, "none")
     }
 
+    func testBackgroundGradientFields() {
+        var s = ViewStyle()
+        s.backgroundGradientDirection = "to-r"
+        s.backgroundGradientFrom = "#3b82f6"
+        s.backgroundGradientTo = "#ef4444"
+        XCTAssertEqual(s.backgroundGradientDirection, "to-r")
+        XCTAssertEqual(s.backgroundGradientFrom, "#3b82f6")
+        XCTAssertEqual(s.backgroundGradientTo, "#ef4444")
+    }
+
+    // MARK: - Media
+    func testObjectFitAndPosition() {
+        var s = ViewStyle()
+        s.objectFit = "cover"
+        s.objectPosition = "right-top"
+        XCTAssertEqual(s.objectFit, "cover")
+        XCTAssertEqual(s.objectPosition, "right-top")
+    }
+
     // MARK: - Codable round-trip
     func testCodableRoundTrip() throws {
         var original = ViewStyle()
@@ -100,6 +119,11 @@ final class ViewStyleTests: XCTestCase {
         original.shadowRadius = 4
         original.textOverflow = "ellipsis"
         original.lineClamp = 2
+        original.backgroundGradientDirection = "to-br"
+        original.backgroundGradientFrom = "#000000"
+        original.backgroundGradientTo = "#ffffff"
+        original.objectFit = "contain"
+        original.objectPosition = "left-bottom"
 
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(ViewStyle.self, from: encoded)
@@ -112,5 +136,10 @@ final class ViewStyleTests: XCTestCase {
         XCTAssertEqual(decoded.shadowRadius, original.shadowRadius)
         XCTAssertEqual(decoded.textOverflow, original.textOverflow)
         XCTAssertEqual(decoded.lineClamp, original.lineClamp)
+        XCTAssertEqual(decoded.backgroundGradientDirection, original.backgroundGradientDirection)
+        XCTAssertEqual(decoded.backgroundGradientFrom, original.backgroundGradientFrom)
+        XCTAssertEqual(decoded.backgroundGradientTo, original.backgroundGradientTo)
+        XCTAssertEqual(decoded.objectFit, original.objectFit)
+        XCTAssertEqual(decoded.objectPosition, original.objectPosition)
     }
 }

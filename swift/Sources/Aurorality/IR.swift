@@ -51,6 +51,7 @@ public struct ViewNode: Codable, Equatable {
     // image
     public var src: String?
     public var alt: String?
+    public var placeholder: String? // image loading placeholder or input placeholder
 
     // slotRotate
     public var phrases: [String]?
@@ -58,7 +59,6 @@ public struct ViewNode: Codable, Equatable {
 
     // input
     public var bind: String?
-    public var placeholder: String?
     public var multiline: Bool?
 
     // picker
@@ -157,6 +157,15 @@ public struct ViewStyle: Codable, Equatable {
     public var lineClamp: Int?
     public var cursor: String?         // macOS only; ignored on iOS
     public var userSelect: String?     // not supported in pure SwiftUI; ignored
+
+    // ── Gradients ─────────────────────────────────────────
+    public var backgroundGradientDirection: String? // "to-r" | "to-l" | "to-t" | "to-b" | diagonal variants
+    public var backgroundGradientFrom: String?
+    public var backgroundGradientTo: String?
+
+    // ── Media ─────────────────────────────────────────────
+    public var objectFit: String?      // "contain" | "cover" | "fill" | "none" | "scale-down"
+    public var objectPosition: String? // "center" | "top" | "bottom" | "left" | "right" | corner variants
 }
 
 // MARK: - Hot-reload protocol
