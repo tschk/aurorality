@@ -7,6 +7,7 @@ bundle_id = "dev.aurorality.example.counter"
 deployment_target = "17.0"
 sources = "Sources"
 resources = ["views", "scripts"]
+embedded_dylibs = ["../../target/debug/libaurorality_core.dylib"]
 
 [build]
 linker_flags = ["-L../../target/debug", "-laurorality_core", "-framework", "JavaScriptCore"]
