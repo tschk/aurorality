@@ -74,8 +74,13 @@ struct CounterView: View {
     }
 
     private func tap(_ method: String) {
-        let data = try? bridge.invokeData(pluginId: "counter", method: method, as: CounterData.self)
-        guard let d = data else { return }
+        guard let json = try? bridge.invoke(pluginId: "counter", method: method),
+              let data = json.data(using: .utf8),
+              let d = try? JSONDecoder().decode(CounterData.self, from: data)
+        else {
+            print("counter tap \(method): bridge.invoke failed")
+            return
+        }
         let url = resourceURL("main", "crepus")
         let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         let timestamp = try? bridge.invokeData(pluginId: "core", method: "timestamp", as: TimestampResponse.self)
@@ -89,6 +94,7 @@ struct CounterView: View {
                 "timestamp": .string("\(ts)ms"),
             ]
         )
+        print("counter tap \(method): count=\(d.count) mood=\(d.mood)")
     }
 
     private struct CounterData: Decodable { let count: String; let mood: String; let next: String }

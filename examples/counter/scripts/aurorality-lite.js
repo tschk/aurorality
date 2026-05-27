@@ -1,41 +1,41 @@
 // aurorality-lite — reactive state helpers for .crepus JS backends.
 //
-// Usage:
-//   $.init({ count: 0 })
-//   $.set("count", $.get("count") + 1)
-//   $.patch({ mood: "climbing" })
-//   return $.state()
+//   $.state.init({ count: 0 })
+//   $.state.set("count", $.state.get("count") + 1)
+//   $.state.patch({ mood: "climbing" })
+//   return $.state.all()
 //
-// Methods return updated state for the Swift render cycle.
-// Swift calls your exported functions → gets state back → re-renders template.
+// Always available — auto-injected by the Rust bridge before your code runs.
 
-var $ = (function () {
-  var _state = {};
+var $ = {
+  state: (function () {
+    var _s = {};
 
-  return {
-    init: function (state) {
-      _state = state || {};
-      return _state;
-    },
+    return {
+      init: function (obj) {
+        _s = obj || {};
+        return _s;
+      },
 
-    get: function (key) {
-      return _state[key];
-    },
+      get: function (key) {
+        return _s[key];
+      },
 
-    set: function (key, value) {
-      _state[key] = value;
-      return _state;
-    },
+      set: function (key, val) {
+        _s[key] = val;
+        return _s;
+      },
 
-    state: function () {
-      return _state;
-    },
+      all: function () {
+        return _s;
+      },
 
-    patch: function (obj) {
-      for (var k in obj) {
-        if (obj.hasOwnProperty(k)) _state[k] = obj[k];
-      }
-      return _state;
-    },
-  };
-})();
+      patch: function (obj) {
+        for (var k in obj) {
+          if (obj.hasOwnProperty(k)) _s[k] = obj[k];
+        }
+        return _s;
+      },
+    };
+  })(),
+};
