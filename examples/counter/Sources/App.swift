@@ -25,7 +25,12 @@ struct CounterApp: App {
     }
 
     private func load() {
-        try? loadScriptPlugin(id: "counter", script: "backend")
+        // Load aurorality-lite first, then backend, in same JSC context.
+        let lite = resourceURL("aurorality-lite", "js")
+            .flatMap { try? String(contentsOf: $0) } ?? ""
+        let backend = resourceURL("backend", "js")
+            .flatMap { try? String(contentsOf: $0) } ?? ""
+        try? loadJsPlugin(id: "counter", code: lite + "\n" + backend)
         render()
     }
 
@@ -52,20 +57,6 @@ struct CounterApp: App {
         enum CodingKeys: String, CodingKey { case unixMs }
     }
     private struct CounterData: Decodable { let count: String; let mood: String; let next: String }
-
-    private func loadScriptPlugin(id: String, script: String) throws {
-        guard let url = resourceURL(script, "js") else {
-            throw AurorPluginError("missing scripts/\(script).js")
-        }
-        try loadJsPlugin(id: id, code: String(contentsOf: url, encoding: .utf8))
-    }
-
-    private func encodePayload(_ dict: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let json = String(data: data, encoding: .utf8)
-        else { return "{}" }
-        return json
-    }
 }
 
 struct CounterView: View {

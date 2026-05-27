@@ -21,6 +21,7 @@ let package = Package(
             resources: [
                 .process("views/main.crepus"),
                 .process("scripts/backend.js"),
+                .process("scripts/aurorality-lite.js"),
             ],
             linkerSettings: [
                 .unsafeFlags([

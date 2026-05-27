@@ -1,25 +1,25 @@
-var count = 0;
+$.init({ count: 0, mood: "neutral", next: "Tap a button" });
 
 function increment() {
-  count++;
-  return _state();
+  var c = $.get("count") + 1;
+  $.set("count", c);
+  $.patch({
+    mood: c === 0 ? "neutral" : c > 0 ? "climbing" : "recovering",
+    next: c >= 10 ? "Reset soon" : c <= -10 ? "Bring it back" : "Keep tapping",
+  });
+  return $.state();
 }
 
 function decrement() {
-  count--;
-  return _state();
+  var c = $.get("count") - 1;
+  $.set("count", c);
+  $.patch({
+    mood: c === 0 ? "neutral" : c > 0 ? "climbing" : "recovering",
+    next: c >= 10 ? "Reset soon" : c <= -10 ? "Bring it back" : "Keep tapping",
+  });
+  return $.state();
 }
 
 function state() {
-  return _state();
-}
-
-function _state() {
-  var mood = count === 0 ? "neutral" : count > 0 ? "climbing" : "recovering";
-  var next = count >= 10 ? "Reset soon" : count <= -10 ? "Bring it back" : "Keep tapping";
-  return {
-    count: String(count),
-    mood: mood,
-    next: next,
-  };
+  return $.state();
 }
