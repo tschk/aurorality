@@ -21,13 +21,12 @@ struct RunnerRootView: View {
     let state: AurorState
     let client: HotReloadClient
 
-    @State private var showConnect = true
+    @State private var showConnect = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             AurorRootView(state: state)
 
-            // Dev toolbar
             Button {
                 showConnect.toggle()
             } label: {
@@ -41,8 +40,17 @@ struct RunnerRootView: View {
         .sheet(isPresented: $showConnect) {
             ConnectView(client: client, state: state, isPresented: $showConnect)
         }
-        .onAppear {
-            if case .disconnected = client.status { showConnect = true }
+        .task { autoConnect() }
+    }
+
+    private func autoConnect() {
+        if let portStr = ProcessInfo.processInfo.environment["AURORALITY_DEV_PORT"],
+           let port = UInt16(portStr) {
+            let host = ProcessInfo.processInfo.environment["AURORALITY_DEV_HOST"] ?? "127.0.0.1"
+            client.connect(to: host, port: port, state: state)
+            showConnect = false
+        } else if case .disconnected = client.status {
+            showConnect = true
         }
     }
 
