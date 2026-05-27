@@ -1,6 +1,16 @@
 import SwiftUI
 import Aurorality
 
+#if SWIFT_PACKAGE
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.module.url(forResource: name, withExtension: ext)
+}
+#else
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.main.url(forResource: name, withExtension: ext)
+}
+#endif
+
 @main
 struct BasicApp: App {
     @State private var state = AurorState()
@@ -40,7 +50,7 @@ struct BasicApp: App {
         let copy = (try? bridge.invokeData(pluginId: "basicJs", method: "describe", payload: jsPayload, as: BasicCopy.self))
             ?? BasicCopy(headline: "Hello from aurorality", detail: "SwiftUI + Rust + JavaScript", badge: "three backends")
 
-        let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+        let url = resourceURL("main", "crepus")
         let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         try? state.load(template: template, context: [
             "headline": .string(copy.headline),
@@ -58,7 +68,7 @@ struct BasicCopy: Decodable { let headline: String; let detail: String; let badg
 struct SessionInfo: Decodable { let owner: String; let mode: String }
 
 private func loadScriptPlugin(id: String, script: String) throws {
-    guard let url = Bundle.main.url(forResource: script, withExtension: "js", subdirectory: "scripts") else {
+    guard let url = resourceURL(script, "js") else {
         throw AurorPluginError("missing scripts/\(script).js")
     }
     try loadJsPlugin(id: id, code: String(contentsOf: url, encoding: .utf8))

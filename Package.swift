@@ -1,7 +1,7 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-let rustLibDir = "/Users/undivisible/projects/aurorality/target/debug"
+let rustLibDir = "target/debug"
 
 // NOTE: Run `cargo build -p aurorality-core` and the uniffi-bindgen step before
 // opening this package. The generated/ directory must contain:

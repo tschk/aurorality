@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build aurorality-core
+        run: cargo build -p aurorality-core --features js --release
+
+      - name: Build aurorality-cli
+        run: cargo build -p aurorality-cli --release
+
+      - name: Test
+        run: cargo test -p aurorality-core --features js
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/release/aurorality dist/
+          cp target/release/libaurorality_core.dylib dist/
+          cd dist && tar czf ../aurorality-${{ github.ref_name }}-macos.tar.gz .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurorality-${{ github.ref_name }}-macos
+          path: aurorality-${{ github.ref_name }}-macos.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aurorality-${{ github.ref_name }}-macos
+          path: .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: aurorality-${{ github.ref_name }}-macos.tar.gz
+          generate_release_notes: true

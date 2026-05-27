@@ -342,6 +342,12 @@ fn emit_node(n: &Node, cx: &GenCtx, ind: usize) -> anyhow::Result<String> {
             Ok(format!("{}Text(String(describing: {}))", indent(ind), e))
         }
         Node::Element(el) => emit_element(el, cx, ind),
+        Node::Embed(_) => Err(anyhow!(
+            "`embed` is not supported in swiftgen yet; use IR rendering instead"
+        )),
+        Node::RawHtml(_) => Err(anyhow!(
+            "`raw_html` is not supported in swiftgen yet; use IR rendering instead"
+        )),
     }
 }
 

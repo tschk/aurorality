@@ -1,13 +1,15 @@
 //! `aurorality` CLI — dev server, build, and project scaffolding.
 
 mod bindgen;
+mod build_swift;
 mod bundle;
 mod dev_server;
 mod scaffold;
 mod swiftgen;
 mod swiftgen_style;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -25,96 +27,86 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the hot-reload dev server and file watcher.
+    /// Start hot-reload dev server and launch the app in a native window.
     ///
-    /// Launch the Aurorality Runner app on your simulator/device, then connect
-    /// it to the address printed by this command.
+    /// Pre-builds Rust core + bindings, starts the WebSocket hot-reload
+    /// server, then builds and launches the SwiftUI app.
+    /// Changes to .crepus files hot-reload the UI without restarting.
     Dev {
         /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
 
-        /// WebSocket port for the Runner app to connect to.
+        /// WebSocket port for hot-reload clients.
         #[arg(short, long, default_value_t = 47832)]
         port: u16,
 
         /// Path to the `.crepus` file for `swiftgen` (hybrid reload).
         #[arg(long)]
         swiftgen_view: Option<PathBuf>,
-        /// Output directory for generated Swift (pairs with `--swiftgen-view`).
         #[arg(long)]
         swiftgen_out: Option<PathBuf>,
-        /// Generated Swift struct name (pairs with `--swiftgen-view`).
         #[arg(long)]
         swiftgen_name: Option<String>,
-        /// Swift context type name for swiftgen (pairs with `--swiftgen-view`).
         #[arg(long)]
         swiftgen_context_type: Option<String>,
 
-        /// Skip IR diff/render; only swiftgen events (requires `--swiftgen-view`).
+        /// Skip IR diff/render; only swiftgen events.
         #[arg(long, default_value_t = false)]
         no_ir: bool,
     },
 
+    /// Build and launch the SwiftUI app (no hot-reload server).
+    Run {
+        /// Project directory.
+        #[arg(default_value = ".")]
+        project: PathBuf,
+    },
+
     /// Render all .crepus files in a directory to JSON IR for bundling.
     Build {
-        /// Directory of .crepus files to render.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
-
-        /// Output directory for the JSON IR files.
         #[arg(short, long, default_value = "generated/ir")]
         out: PathBuf,
     },
 
     /// Scaffold a new aurorality project.
     New {
-        /// Name of the new project.
         name: String,
     },
 
     /// Bundle JS (via bun/esbuild) + compile .crepus templates to IR JSON.
     Bundle {
-        /// Directory of .crepus views to compile.
         #[arg(long, default_value = "views")]
         views: PathBuf,
-        /// Output directory for compiled IR JSON files.
         #[arg(long, default_value = "generated/ir")]
         out: PathBuf,
-        /// JS entry point to bundle (optional).
         #[arg(long)]
         js_entry: Option<PathBuf>,
-        /// Output path for the bundled JS file.
         #[arg(long, default_value = "bundle/main.js")]
         js_out: PathBuf,
-        /// JS bundler to use: "bun" or "esbuild".
         #[arg(long, default_value = "bun")]
         bundler: String,
     },
 
-    /// Generate SwiftUI source from a `.crepus` template (compile-time codegen).
+    /// Generate SwiftUI source from a `.crepus` template.
     #[command(name = "swiftgen")]
     SwiftGen {
-        /// Path to a single `.crepus` file.
         #[arg(long)]
         view: PathBuf,
-        /// Output directory for `<view-name>.swift`.
         #[arg(long)]
         out: PathBuf,
-        /// Name of the generated Swift `struct` (e.g. `HyperChatGeneratedView`).
         #[arg(long)]
         view_name: String,
-        /// Swift type name for the `context` parameter (fields must match template bindings).
         #[arg(long, default_value = "HyperChatContext")]
         context_type: String,
     },
 
-    /// Generate typed Swift wrappers from JS plugin export signatures.
+    /// Generate typed Swift wrappers from JS plugin exports.
     Bindgen {
-        /// Directory of .js plugin files to scan.
         #[arg(short, long, default_value = "plugins")]
         input: PathBuf,
-        /// Output directory for generated Swift files.
         #[arg(short, long, default_value = "generated")]
         output: PathBuf,
     },
@@ -125,47 +117,42 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Dev {
-            watch,
-            port,
-            swiftgen_view,
-            swiftgen_out,
-            swiftgen_name,
-            swiftgen_context_type,
-            no_ir,
-        } => {
+        Commands::Dev { watch, port, swiftgen_view, swiftgen_out, swiftgen_name, swiftgen_context_type, no_ir } => {
             let ir_enabled = !no_ir;
-            let swiftgen = match (
-                swiftgen_view,
-                swiftgen_out,
-                swiftgen_name,
-                swiftgen_context_type,
-            ) {
+            let swiftgen = match (swiftgen_view, swiftgen_out, swiftgen_name, swiftgen_context_type) {
                 (Some(view), Some(out), Some(view_name), Some(context_type)) => {
                     Some(dev_server::SwiftgenDevConfig {
                         view: std::fs::canonicalize(&view).unwrap_or(view),
-                        out,
-                        view_name,
-                        context_type,
+                        out, view_name, context_type,
                     })
                 }
                 (None, None, None, None) => None,
-                _ => {
-                    anyhow::bail!(
-                        "swiftgen requires --swiftgen-view, --swiftgen-out, --swiftgen-name, and --swiftgen-context-type"
-                    );
-                }
+                _ => anyhow::bail!("swiftgen requires --swiftgen-view, --swiftgen-out, --swiftgen-name, and --swiftgen-context-type"),
             };
             if no_ir && swiftgen.is_none() {
                 anyhow::bail!("--no-ir requires --swiftgen-view (and related swiftgen flags)");
             }
+
+            pre_build()?;
+
+            let dev_port = port;
+            let project = std::env::current_dir()?;
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = build_swift::build_and_launch(&project, Some(dev_port)) {
+                    eprintln!("app launch failed: {e}");
+                }
+            });
+
             dev_server::run(dev_server::DevServerConfig {
                 watch_dir: watch,
                 port,
                 swiftgen,
                 ir_enabled,
-            })
-            .await?;
+            }).await?;
+        }
+        Commands::Run { project } => {
+            pre_build()?;
+            build_swift::build_and_launch(&project, None)?;
         }
         Commands::Build { watch, out } => {
             build_all(&watch, &out)?;
@@ -173,30 +160,15 @@ async fn main() -> Result<()> {
         Commands::New { name } => {
             scaffold::new_project(&name)?;
         }
-        Commands::Bundle {
-            views,
-            out,
-            js_entry,
-            js_out,
-            bundler,
-        } => {
+        Commands::Bundle { views, out, js_entry, js_out, bundler } => {
             bundle::run(bundle::BundleConfig {
-                views_dir: views,
-                ir_out: out,
-                js_entry,
-                js_out,
-                bundler,
+                views_dir: views, ir_out: out, js_entry, js_out, bundler,
             })?;
         }
         Commands::Bindgen { input, output } => {
             bindgen::run(&input, &output)?;
         }
-        Commands::SwiftGen {
-            view,
-            out,
-            view_name,
-            context_type,
-        } => {
+        Commands::SwiftGen { view, out, view_name, context_type } => {
             swiftgen::run(&view, &out, &view_name, &context_type)?;
         }
     }
@@ -204,29 +176,79 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn build_all(views_dir: &PathBuf, out_dir: &PathBuf) -> Result<()> {
+fn find_workspace_root() -> PathBuf {
+    let mut dir = std::env::current_dir().unwrap_or_default();
+    loop {
+        if dir.join("Cargo.toml").exists() && dir.join("Cargo.lock").exists() {
+            return dir;
+        }
+        if !dir.pop() {
+            return PathBuf::from(".");
+        }
+    }
+}
+
+fn pre_build() -> Result<()> {
+    let ws = find_workspace_root();
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    println!("building aurorality-core...");
+    run_cmd(
+        Command::new(&cargo).args(["build", "-p", "aurorality-core", "--features", "js"])
+            .current_dir(&ws),
+        "cargo build",
+    )?;
+
+    println!("generating Swift bindings...");
+    let dylib = ws.join("target/debug/libaurorality_core.dylib");
+    let generated = ws.join("generated");
+    run_cmd(
+        Command::new(&cargo)
+            .args(["run", "-p", "aurorality-core", "--features", "js", "--bin", "uniffi-bindgen",
+                   "generate", "--library"])
+            .arg(&dylib)
+            .args(["--language", "swift", "--out-dir"])
+            .arg(&generated)
+            .current_dir(&ws),
+        "uniffi-bindgen",
+    )?;
+    let mm = generated.join("aurorality_coreFFI.modulemap");
+    if mm.exists() {
+        std::fs::copy(&mm, generated.join("module.modulemap"))?;
+    }
+
+    Ok(())
+}
+
+fn build_all(views_dir: &Path, out_dir: &Path) -> Result<()> {
     use crepuscularity_core::context::TemplateContext;
     use crepuscularity_native::{render_template_to_ir, to_json_pretty};
 
     std::fs::create_dir_all(out_dir)?;
     let ctx = TemplateContext::new();
-
     let mut count = 0;
+
     for entry in std::fs::read_dir(views_dir)?.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "crepus") {
             let content = std::fs::read_to_string(&path)?;
             let ir = render_template_to_ir(&content, &ctx)
                 .map_err(|e| anyhow::anyhow!("failed to render {}: {e}", path.display()))?;
-            let json = to_json_pretty(&ir)?;
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
             let out_path = out_dir.join(format!("{stem}.json"));
-            std::fs::write(&out_path, json)?;
+            std::fs::write(&out_path, to_json_pretty(&ir)?)?;
             println!("  {}  →  {}", path.display(), out_path.display());
             count += 1;
         }
     }
-
     println!("built {count} template(s)");
+    Ok(())
+}
+
+fn run_cmd(cmd: &mut Command, label: &str) -> Result<()> {
+    let status = cmd.status().map_err(|e| anyhow::anyhow!("{label}: {e}"))?;
+    if !status.success() {
+        anyhow::bail!("{label} failed ({})", status.code().unwrap_or(1));
+    }
     Ok(())
 }

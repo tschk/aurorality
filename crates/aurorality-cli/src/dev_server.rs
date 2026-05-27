@@ -2,9 +2,9 @@
 //!
 //! Watches a directory of `.crepus` files. When a file changes it re-renders
 //! the template and broadcasts a [`crepuscularity_native::HotReloadEnvelope`]
-//! to all connected WebSocket clients (the Runner app).
+//! to all connected clients (the AurorRunner preview window or your app).
 //!
-//! Optionally runs [`crate::swiftgen`] after each relevant save and broadcasts
+//! Optionally runs [`crate::swiftgen`] after each save and broadcasts
 //! [`HotReloadMessage::SwiftgenStatus`] for hybrid compile-time + IR workflows.
 
 use std::collections::HashMap;
@@ -24,7 +24,6 @@ use tokio_tungstenite::tungstenite::Message;
 use crepuscularity_core::context::TemplateContext;
 use crepuscularity_native::{plan_hot_reload, HotReloadEnvelope, HotReloadMessage};
 
-/// If set, re-run `swiftgen` when the matching `.crepus` file is saved.
 #[derive(Clone, Debug)]
 pub struct SwiftgenDevConfig {
     pub view: PathBuf,
@@ -33,21 +32,19 @@ pub struct SwiftgenDevConfig {
     pub context_type: String,
 }
 
-/// Dev server options (hybrid IR + optional swiftgen).
 #[derive(Clone, Debug)]
 pub struct DevServerConfig {
     pub watch_dir: PathBuf,
     pub port: u16,
     pub swiftgen: Option<SwiftgenDevConfig>,
-    /// When false, skip IR diff/plan_hot_reload (swiftgen-only mode).
     pub ir_enabled: bool,
 }
 
-/// Start the dev server: file watcher + WebSocket broadcast.
 pub async fn run(cfg: DevServerConfig) -> Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], cfg.port));
     let listener = TcpListener::bind(&addr).await?;
-    println!("aurorality dev  →  ws://{addr}");
+
+    println!("aurorality dev  →  ready on port {}", cfg.port);
     println!("watching        →  {}", cfg.watch_dir.display());
     if let Some(sg) = &cfg.swiftgen {
         println!(
@@ -66,7 +63,7 @@ pub async fn run(cfg: DevServerConfig) -> Result<()> {
     );
 
     let session_id = format!(
-        "{}", /* stable-ish id */
+        "{}",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -99,7 +96,7 @@ pub async fn run(cfg: DevServerConfig) -> Result<()> {
     let session_for_hello = session_id;
 
     while let Ok((stream, peer)) = listener.accept().await {
-        println!("runner connected  →  {peer}");
+        println!("connected  →  {peer}");
         let rx = tx.subscribe();
 
         let snapshot = if ir_enabled {
@@ -217,7 +214,7 @@ async fn handle_connection(
             }
         }
     }
-    println!("runner disconnected  →  {peer}");
+    println!("disconnected  →  {peer}");
 }
 
 fn watch_files(
@@ -232,6 +229,15 @@ fn watch_files(
     let (notify_tx, notify_rx) = std::sync::mpsc::channel::<DebounceEventResult>();
     let mut debouncer =
         new_debouncer(Duration::from_millis(150), notify_tx).expect("debouncer init");
+
+    if !watch_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&watch_dir) {
+            eprintln!("watch: could not create {} ({e})", watch_dir.display());
+            return;
+        }
+        eprintln!("watch: created {}", watch_dir.display());
+    }
+
     debouncer
         .watcher()
         .watch(&watch_dir, RecursiveMode::Recursive)

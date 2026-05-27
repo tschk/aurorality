@@ -40,6 +40,20 @@ aurorality/
     └── textanalyzer/
 ```
 
+## Install
+
+```bash
+# Install the CLI
+cargo install aurorality-cli --git https://github.com/your-org/aurorality
+
+# Or use via the crepus CLI (install both)
+cargo install crepuscularity-cli --git https://github.com/semitechnological/crepuscularity
+# Then: crepus aurora dev --watch views
+
+# Verify
+aurorality --version
+```
+
 ## Quick Start
 
 ```bash
@@ -52,11 +66,11 @@ cargo run -p aurorality-core --features js --bin uniffi-bindgen generate \
   --language swift --out-dir generated
 cp generated/aurorality_coreFFI.modulemap generated/module.modulemap
 
-# Run dev server
-cargo run -p aurorality-cli -- dev examples/basic
+# Run an example
+cd examples/counter && ./run.sh
 
-# Or open in Xcode
-open examples/basic/Aurorality.xcodeproj
+# Or start the dev server
+cargo run -p aurorality-cli -- dev examples/basic
 ```
 
 ## Template Syntax

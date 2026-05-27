@@ -1,6 +1,16 @@
 import SwiftUI
 import Aurorality
 
+#if SWIFT_PACKAGE
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.module.url(forResource: name, withExtension: ext)
+}
+#else
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.main.url(forResource: name, withExtension: ext)
+}
+#endif
+
 @main
 struct CounterApp: App {
     @State private var bridge = AurorBridge()
@@ -23,6 +33,7 @@ struct CounterApp: App {
                 .aurorDevOverlay(templatePath: "views/main.crepus")
                 .task { loadTemplate() }
         }
+        .aurorBridge(bridge)
     }
 
     private func loadTemplate() {
@@ -31,7 +42,7 @@ struct CounterApp: App {
     }
 
     private func render() {
-        let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+        let url = resourceURL("main", "crepus")
         let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         let timestamp = try? bridge.invokeData(pluginId: "core", method: "timestamp", as: TimestampResponse.self)
         let ts = timestamp?.unixMs ?? 0
@@ -59,7 +70,7 @@ struct CounterApp: App {
     private struct CounterCopy: Decodable { let display: String; let mood: String; let next: String }
 
     private func loadScriptPlugin(id: String, script: String) throws {
-        guard let url = Bundle.main.url(forResource: script, withExtension: "js", subdirectory: "scripts") else {
+        guard let url = resourceURL(script, "js") else {
             throw AurorPluginError("missing scripts/\(script).js")
         }
         try loadJsPlugin(id: id, code: String(contentsOf: url, encoding: .utf8))
@@ -97,7 +108,7 @@ struct CounterView: View {
               let obj  = try? JSONDecoder().decode(CountResult.self, from: data)
         else { return }
         count = obj.count
-        let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+        let url = resourceURL("main", "crepus")
         let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         let timestamp = try? bridge.invokeData(pluginId: "core", method: "timestamp", as: TimestampResponse.self)
         let ts = timestamp?.unixMs ?? 0

@@ -12,6 +12,16 @@
 import SwiftUI
 import Aurorality
 
+#if SWIFT_PACKAGE
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.module.url(forResource: name, withExtension: ext)
+}
+#else
+private func resourceURL(_ name: String, _ ext: String) -> URL? {
+    Bundle.main.url(forResource: name, withExtension: ext)
+}
+#endif
+
 // MARK: - Response types
 
 struct StatsResult: Decodable {
@@ -73,7 +83,7 @@ struct AnalyzerView: View {
             TextEditor(text: $inputText)
                 .frame(height: 120)
                 .padding(12)
-                .background(Color(.secondarySystemBackground))
+                .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(8)
                 .padding()
 
@@ -120,7 +130,7 @@ struct AnalyzerView: View {
     }
 
     private func rerender(stats: StatsResult) {
-let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+let url = resourceURL("main", "crepus")
 let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         let js = (try? bridge.invokeData(
             pluginId: "textJs",
@@ -141,7 +151,7 @@ let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found
     }
 
     private func loadTemplate() {
-let url = Bundle.main.url(forResource: "main", withExtension: "crepus")
+let url = resourceURL("main", "crepus")
 let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
         try? state.load(template: template, context: [
             "wordCount": .int(0),
@@ -168,7 +178,7 @@ let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found
     }
 
     private func loadScriptPlugin(id: String, script: String) throws {
-        guard let url = Bundle.main.url(forResource: script, withExtension: "js", subdirectory: "scripts") else {
+        guard let url = resourceURL(script, "js") else {
             throw AurorPluginError("missing scripts/\(script).js")
         }
         try loadJsPlugin(id: id, code: String(contentsOf: url, encoding: .utf8))
