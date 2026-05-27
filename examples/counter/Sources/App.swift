@@ -25,18 +25,17 @@ struct CounterApp: App {
     }
 
     private func load() {
-        // aurorality-lite.js is auto-injected by the Rust bridge.
         guard let url = resourceURL("backend", "js"),
               let code = try? String(contentsOf: url, encoding: .utf8) else { return }
+        // JS plugin lives in Rust bridge. Register a RustPlugin proxy in Swift bridge.
         try? loadJsPlugin(id: "counter", code: code)
+        bridge.register(RustPlugin(id: "counter"))
         render()
     }
 
     private func render() {
         let url = resourceURL("main", "crepus")
         let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
-        let timestamp = try? bridge.invokeData(pluginId: "core", method: "timestamp", as: TimestampResponse.self)
-        let ts = timestamp?.unixMs ?? 0
         let data = (try? bridge.invokeData(pluginId: "counter", method: "state", as: CounterData.self))
             ?? CounterData(count: "0", mood: "neutral", next: "Tap a button")
         try? state.load(
@@ -45,24 +44,25 @@ struct CounterApp: App {
                 "count":     .string(data.count),
                 "mood":      .string(data.mood),
                 "next":      .string(data.next),
-                "timestamp": .string("\(ts)ms"),
             ]
         )
     }
 
-    private struct TimestampResponse: Decodable {
-        let unixMs: UInt64
-        enum CodingKeys: String, CodingKey { case unixMs }
-    }
     private struct CounterData: Decodable { let count: String; let mood: String; let next: String }
 }
 
 struct CounterView: View {
     let state: AurorState
     let bridge: AurorBridge
+    @State private var errorMsg: String?
 
     var body: some View {
         AurorRootView(state: state)
+            .alert("Error", isPresented: .constant(errorMsg != nil)) {
+                Button("OK") { errorMsg = nil }
+            } message: {
+                Text(errorMsg ?? "")
+            }
             .onReceive(NotificationCenter.default.publisher(for: .init("auror.event"))) { note in
                 guard let event = note.object as? String else { return }
                 switch event {
@@ -74,32 +74,19 @@ struct CounterView: View {
     }
 
     private func tap(_ method: String) {
-        guard let json = try? bridge.invoke(pluginId: "counter", method: method),
-              let data = json.data(using: .utf8),
-              let d = try? JSONDecoder().decode(CounterData.self, from: data)
-        else {
-            print("counter tap \(method): bridge.invoke failed")
-            return
+        do {
+            let d: CounterData = try bridge.invokeData(pluginId: "counter", method: method)
+            let url = resourceURL("main", "crepus")
+            let template = url.flatMap { try? String(contentsOf: $0) } ?? ""
+            try state.load(template: template, context: [
+                "count": .string(d.count),
+                "mood": .string(d.mood),
+                "next": .string(d.next),
+            ])
+        } catch {
+            errorMsg = error.localizedDescription
         }
-        let url = resourceURL("main", "crepus")
-        let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
-        let timestamp = try? bridge.invokeData(pluginId: "core", method: "timestamp", as: TimestampResponse.self)
-        let ts = timestamp?.unixMs ?? 0
-        try? state.load(
-            template: template,
-            context: [
-                "count":     .string(d.count),
-                "mood":      .string(d.mood),
-                "next":      .string(d.next),
-                "timestamp": .string("\(ts)ms"),
-            ]
-        )
-        print("counter tap \(method): count=\(d.count) mood=\(d.mood)")
     }
 
     private struct CounterData: Decodable { let count: String; let mood: String; let next: String }
-    private struct TimestampResponse: Decodable {
-        let unixMs: UInt64
-        enum CodingKeys: String, CodingKey { case unixMs }
-    }
 }

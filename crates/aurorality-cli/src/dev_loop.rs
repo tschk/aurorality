@@ -110,7 +110,6 @@ pub fn run(watch_views: PathBuf) {
 }
 
 fn build_and_launch_app(project_root: &PathBuf) -> Option<Child> {
-    // Build Swift
     let swift = crate::find_swift();
     let t0 = Instant::now();
 
@@ -124,7 +123,13 @@ fn build_and_launch_app(project_root: &PathBuf) -> Option<Child> {
             let elapsed = t0.elapsed().as_millis();
             println!("  built in {elapsed} ms — launching");
 
-            // Create .app bundle and launch
+            // Kill old instances before launching new one
+            if let Ok(cfg) = build_swift::read_config(project_root) {
+                let _ = Command::new("pkill")
+                    .args(["-f", &cfg.name])
+                    .status();
+            }
+
             match build_swift::build_and_launch_spawn(project_root) {
                 Ok(child) => Some(child),
                 Err(e) => {

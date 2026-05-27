@@ -94,6 +94,7 @@ struct AnalyzerView: View {
         }
         .task {
             try? loadScriptPlugin(id: "textJs", script: "backend")
+            bridge.register(RustPlugin(id: "textJs"))
             loadTemplate()
         }
     }

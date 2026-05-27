@@ -30,6 +30,7 @@ struct BasicApp: App {
 
     private func load() {
         try? loadScriptPlugin(id: "basicJs", script: "backend")
+        bridge.register(RustPlugin(id: "basicJs"))
 
         let platform = (try? bridge.invokeData(pluginId: "app", method: "platform", as: PlatformInfo.self))
             ?? PlatformInfo(os: "unknown", arch: "unknown")
