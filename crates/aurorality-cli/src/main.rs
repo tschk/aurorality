@@ -135,11 +135,12 @@ async fn main() -> Result<()> {
 
             pre_build()?;
 
+            // Launch AurorRunner preview window (not the project itself)
             let dev_port = port;
-            let project = std::env::current_dir()?;
+            let ws_root = find_workspace_root();
             tokio::task::spawn_blocking(move || {
-                if let Err(e) = build_swift::build_and_launch(&project, Some(dev_port)) {
-                    eprintln!("app launch failed: {e}");
+                if let Err(e) = build_swift::build_and_launch_runner(&ws_root, dev_port) {
+                    eprintln!("preview window failed: {e}");
                 }
             });
 
