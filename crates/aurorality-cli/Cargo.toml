@@ -17,8 +17,6 @@ serde_json = { workspace = true }
 crepuscularity-native = { workspace = true }
 crepuscularity-core = { workspace = true }
 clap = { version = "4", features = ["derive"] }
-notify-debouncer-mini = "0.4"
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.23"
-futures-util = "0.3"
+notify = "8"
+console = "0.16"
 anyhow = "1"

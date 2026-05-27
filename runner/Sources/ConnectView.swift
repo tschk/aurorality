@@ -45,7 +45,7 @@ struct ConnectView: View {
                 }
 
                 Section {
-                    Text("Run `aurorality dev --watch ./views` in your project, then enter the address above.")
+                    Text("Run `aurorality dev` in your project, then enter the server address above.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

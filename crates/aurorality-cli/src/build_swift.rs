@@ -5,7 +5,7 @@
 //! minimal `.app` bundle, and launches it with `open`.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command};
 
 use anyhow::Result;
 
@@ -104,37 +104,19 @@ fn infer_from_package(project_root: &Path) -> Result<ProjectConfig> {
     })
 }
 
-/// Build and launch the AurorRunner preview app (separate hot-reload window).
-pub fn build_and_launch_runner(workspace: &Path, dev_port: u16) -> Result<()> {
-    let runner_dir = workspace.join("runner");
-    if !runner_dir.join("Package.swift").exists() {
-        anyhow::bail!("runner/Package.swift not found at {}", workspace.display());
-    }
+/// Build project, wrap in .app bundle, launch with `open` — returns Child.
+pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
+    let cfg = read_config(project_root)?;
+    let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
+    let bin = find_binary(project_root, &bin_name)
+        .or_else(|_| find_binary(project_root, &cfg.name))?;
 
-    let swift = find_swift();
+    let app_dir = create_app_bundle(project_root, &cfg.name, &cfg.bundle_id, &bin, &cfg.resources)?;
 
-    println!("building AurorRunner preview...");
-    let status = Command::new(&swift)
-        .arg("build")
-        .current_dir(&runner_dir)
-        .status()
-        .map_err(|e| anyhow::anyhow!("swift build: {e}"))?;
-    if !status.success() {
-        anyhow::bail!("swift build runner failed");
-    }
-
-    let bin = find_binary(&runner_dir, "AurorRunner")?;
-    let app_dir = create_app_bundle(&runner_dir, "AurorRunner", "dev.aurorality.runner", &bin, &[])?;
-
-    println!("opening preview window...");
     Command::new("open")
         .arg(&app_dir)
-        .env("AURORALITY_DEV_PORT", dev_port.to_string())
-        .env("AURORALITY_DEV_HOST", "127.0.0.1")
         .spawn()
-        .map_err(|e| anyhow::anyhow!("open: {e}"))?;
-
-    Ok(())
+        .map_err(|e| anyhow::anyhow!("open: {e}"))
 }
 
 /// Build project, wrap in .app bundle, launch with `open`.
