@@ -43,6 +43,10 @@ enum Commands {
         /// Project directory.
         #[arg(default_value = ".")]
         project: PathBuf,
+
+        /// Build and launch on iOS Simulator instead of macOS.
+        #[arg(long)]
+        ios: bool,
     },
 
     /// Render all .crepus files in a directory to JSON IR for bundling.
@@ -101,9 +105,13 @@ fn main() -> Result<()> {
         Commands::Dev { watch } => {
             dev_loop::run(watch);
         }
-        Commands::Run { project } => {
+        Commands::Run { project, ios } => {
             pre_build()?;
-            build_swift::build_and_launch(&project, None)?;
+            if ios {
+                build_swift::build_and_launch_ios(&project)?;
+            } else {
+                build_swift::build_and_launch(&project, None)?;
+            }
         }
         Commands::Build { watch, out } => {
             build_all(&watch, &out)?;

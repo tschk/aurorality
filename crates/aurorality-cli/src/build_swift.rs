@@ -104,6 +104,64 @@ fn infer_from_package(project_root: &Path) -> Result<ProjectConfig> {
     })
 }
 
+/// Build and launch on iOS Simulator.
+pub fn build_and_launch_ios(project_root: &Path) -> Result<()> {
+    let cfg = read_config(project_root)?;
+    let swift = find_swift();
+
+    let sdk_path = String::from_utf8(
+        Command::new("xcrun")
+            .args(["--sdk", "iphonesimulator", "--show-sdk-path"])
+            .output()
+            .map_err(|e| anyhow::anyhow!("xcrun: {e}"))?
+            .stdout,
+    )?
+    .trim()
+    .to_string();
+
+    println!("building {} for iOS Simulator...", cfg.name);
+    let status = Command::new(&swift)
+        .args(["build", "--triple", "arm64-apple-ios-simulator",
+               "-Xswiftc", "-sdk", "-Xswiftc", &sdk_path])
+        .current_dir(project_root)
+        .status()
+        .map_err(|e| anyhow::anyhow!("swift build ios: {e}"))?;
+    if !status.success() {
+        anyhow::bail!("ios build failed");
+    }
+
+    let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
+    let bin = find_binary(project_root, &bin_name)
+        .or_else(|_| find_binary(project_root, &cfg.name))?;
+
+    println!("launching in iOS Simulator...");
+    let booted = Command::new("xcrun")
+        .args(["simctl", "list", "booted", "devices"])
+        .output()
+        .map_err(|e| anyhow::anyhow!("simctl list: {e}"))?;
+    if booted.stdout.is_empty() || !String::from_utf8_lossy(&booted.stdout).contains("iPhone") {
+        eprintln!("  no booted simulator — booting iPhone 16...");
+        Command::new("xcrun")
+            .args(["simctl", "boot", "iPhone 16"])
+            .status()
+            .ok();
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
+    Command::new("xcrun")
+        .args(["simctl", "install", "booted", &bin.display().to_string()])
+        .status()
+        .map_err(|e| anyhow::anyhow!("simctl install: {e}"))?;
+
+    Command::new("xcrun")
+        .args(["simctl", "launch", "booted", &cfg.bundle_id])
+        .status()
+        .map_err(|e| anyhow::anyhow!("simctl launch: {e}"))?;
+
+    println!("app running in Simulator");
+    Ok(())
+}
+
 /// Build project, wrap in .app bundle, launch with `open` — returns Child.
 pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
     let cfg = read_config(project_root)?;
