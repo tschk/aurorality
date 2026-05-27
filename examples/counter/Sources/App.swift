@@ -25,12 +25,10 @@ struct CounterApp: App {
     }
 
     private func load() {
-        // Load aurorality-lite first, then backend, in same JSC context.
-        let lite = resourceURL("aurorality-lite", "js")
-            .flatMap { try? String(contentsOf: $0) } ?? ""
-        let backend = resourceURL("backend", "js")
-            .flatMap { try? String(contentsOf: $0) } ?? ""
-        try? loadJsPlugin(id: "counter", code: lite + "\n" + backend)
+        // aurorality-lite.js is auto-injected by the Rust bridge.
+        guard let url = resourceURL("backend", "js"),
+              let code = try? String(contentsOf: url, encoding: .utf8) else { return }
+        try? loadJsPlugin(id: "counter", code: code)
         render()
     }
 

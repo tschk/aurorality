@@ -11,6 +11,9 @@ use crate::bridge::NativePlugin;
 
 use super::runtime::JscRuntime;
 
+/// aurorality-lite.js — embedded at compile time, auto-injected before every JS plugin.
+const AURORALITY_LITE: &str = include_str!("aurorality-lite.js");
+
 pub struct JsPlugin {
     plugin_id: String,
     exported_methods: Vec<String>,
@@ -20,15 +23,19 @@ pub struct JsPlugin {
 impl JsPlugin {
     /// Create a plugin from a JS source string.
     ///
+    /// `aurorality-lite.js` is automatically prepended so `$` state helpers
+    /// are always available — like jQuery for `.crepus` templates.
+    ///
     /// - `id`: plugin identifier (used in `plugin_invoke` calls)
     /// - `code`: JS source; all top-level `function` declarations become callable methods
     ///
     /// Returns `Err` if the JS fails to parse/execute during the initial load.
     pub fn from_code(id: &str, code: &str) -> Result<Self, String> {
-        let methods = extract_fn_names(code);
+        let full_code = format!("{}\n{}", AURORALITY_LITE, code);
+        let methods = extract_fn_names(&full_code);
         let mut rt = JscRuntime::new();
         rt.install_bridge_callback();
-        rt.load_code(code)?;
+        rt.load_code(&full_code)?;
         Ok(Self {
             plugin_id: id.to_string(),
             exported_methods: methods,
