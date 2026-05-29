@@ -333,6 +333,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-core"
 version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0734d9ca0475ecaef7e8609e9b20dbd2824993f3e2bd2bd92e2963f354cec48c"
 dependencies = [
  "sha2",
  "toml 1.1.2+spec-1.1.0",
@@ -342,6 +344,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-native"
 version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "566c9dae5c877693ed0f5bcfed62b2f961745209049d0bd0f9b47502975bb4d6"
 dependencies = [
  "crepuscularity-core",
  "regex",

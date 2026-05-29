@@ -20,5 +20,5 @@ serde_json = "1"
 uniffi = { version = "0.31", features = ["cli"] }
 eqswift = "0.1.1"
 ureq = { version = "2", features = ["json"] }
-crepuscularity-native = { path = "../crepuscularity/crates/crepuscularity-native" }
-crepuscularity-core = { path = "../crepuscularity/crates/crepuscularity-core" }
+crepuscularity-native = "0.4.4"
+crepuscularity-core = "0.4.9"

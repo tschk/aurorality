@@ -125,9 +125,7 @@ fn build_and_launch_app(project_root: &PathBuf) -> Option<Child> {
 
             // Kill old instances before launching new one
             if let Ok(cfg) = build_swift::read_config(project_root) {
-                let _ = Command::new("pkill")
-                    .args(["-f", &cfg.name])
-                    .status();
+                let _ = Command::new("pkill").args(["-f", &cfg.name]).status();
             }
 
             match build_swift::build_and_launch_spawn(project_root) {

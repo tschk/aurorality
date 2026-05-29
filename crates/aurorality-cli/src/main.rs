@@ -58,9 +58,7 @@ enum Commands {
     },
 
     /// Scaffold a new aurorality project.
-    New {
-        name: String,
-    },
+    New { name: String },
 
     /// Bundle JS + compile .crepus templates to IR JSON.
     Bundle {
@@ -119,15 +117,30 @@ fn main() -> Result<()> {
         Commands::New { name } => {
             scaffold::new_project(&name)?;
         }
-        Commands::Bundle { views, out, js_entry, js_out, bundler } => {
+        Commands::Bundle {
+            views,
+            out,
+            js_entry,
+            js_out,
+            bundler,
+        } => {
             bundle::run(bundle::BundleConfig {
-                views_dir: views, ir_out: out, js_entry, js_out, bundler,
+                views_dir: views,
+                ir_out: out,
+                js_entry,
+                js_out,
+                bundler,
             })?;
         }
         Commands::Bindgen { input, output } => {
             bindgen::run(&input, &output)?;
         }
-        Commands::SwiftGen { view, out, view_name, context_type } => {
+        Commands::SwiftGen {
+            view,
+            out,
+            view_name,
+            context_type,
+        } => {
             swiftgen::run(&view, &out, &view_name, &context_type)?;
         }
     }
@@ -163,8 +176,17 @@ pub fn pre_build() -> Result<()> {
     let dylib = ws.join("target/debug/libaurorality_core.dylib");
     let generated = ws.join("generated");
     let status = Command::new(&cargo)
-        .args(["run", "-p", "aurorality-core", "--features", "js", "--bin", "uniffi-bindgen",
-               "generate", "--library"])
+        .args([
+            "run",
+            "-p",
+            "aurorality-core",
+            "--features",
+            "js",
+            "--bin",
+            "uniffi-bindgen",
+            "generate",
+            "--library",
+        ])
         .arg(&dylib)
         .args(["--language", "swift", "--out-dir"])
         .arg(&generated)
@@ -184,11 +206,15 @@ pub fn pre_build() -> Result<()> {
 }
 
 pub fn find_swift() -> String {
-    if let Ok(path) = std::env::var("SWIFT_PATH") { return path; }
+    if let Ok(path) = std::env::var("SWIFT_PATH") {
+        return path;
+    }
     if let Ok(out) = Command::new("xcrun").args(["-f", "swift"]).output() {
         if out.status.success() {
             let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !p.is_empty() { return p; }
+            if !p.is_empty() {
+                return p;
+            }
         }
     }
     "swift".to_string()

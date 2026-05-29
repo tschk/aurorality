@@ -69,7 +69,11 @@ fn try_read_toml(path: &Path) -> Result<ProjectConfig> {
         bundle_id = format!("dev.aurorality.{}", name.to_lowercase());
     }
 
-    Ok(ProjectConfig { name, bundle_id, resources })
+    Ok(ProjectConfig {
+        name,
+        bundle_id,
+        resources,
+    })
 }
 
 fn try_read_brisk(path: &Path) -> Result<ProjectConfig> {
@@ -121,8 +125,15 @@ pub fn build_and_launch_ios(project_root: &Path) -> Result<()> {
 
     println!("building {} for iOS Simulator...", cfg.name);
     let status = Command::new(&swift)
-        .args(["build", "--triple", "arm64-apple-ios-simulator",
-               "-Xswiftc", "-sdk", "-Xswiftc", &sdk_path])
+        .args([
+            "build",
+            "--triple",
+            "arm64-apple-ios-simulator",
+            "-Xswiftc",
+            "-sdk",
+            "-Xswiftc",
+            &sdk_path,
+        ])
         .current_dir(project_root)
         .status()
         .map_err(|e| anyhow::anyhow!("swift build ios: {e}"))?;
@@ -131,8 +142,8 @@ pub fn build_and_launch_ios(project_root: &Path) -> Result<()> {
     }
 
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
-    let bin = find_binary(project_root, &bin_name)
-        .or_else(|_| find_binary(project_root, &cfg.name))?;
+    let bin =
+        find_binary(project_root, &bin_name).or_else(|_| find_binary(project_root, &cfg.name))?;
 
     println!("launching in iOS Simulator...");
     let booted = Command::new("xcrun")
@@ -166,10 +177,16 @@ pub fn build_and_launch_ios(project_root: &Path) -> Result<()> {
 pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
     let cfg = read_config(project_root)?;
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
-    let bin = find_binary(project_root, &bin_name)
-        .or_else(|_| find_binary(project_root, &cfg.name))?;
+    let bin =
+        find_binary(project_root, &bin_name).or_else(|_| find_binary(project_root, &cfg.name))?;
 
-    let app_dir = create_app_bundle(project_root, &cfg.name, &cfg.bundle_id, &bin, &cfg.resources)?;
+    let app_dir = create_app_bundle(
+        project_root,
+        &cfg.name,
+        &cfg.bundle_id,
+        &bin,
+        &cfg.resources,
+    )?;
 
     Command::new("open")
         .arg(&app_dir)
@@ -195,18 +212,24 @@ pub fn build_and_launch(project_root: &Path, dev_port: Option<u16>) -> Result<()
 
     // 2. Find built binary — try Package.swift name first, then config name
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
-    let bin = find_binary(project_root, &bin_name)
-        .or_else(|_| find_binary(project_root, &cfg.name))?;
+    let bin =
+        find_binary(project_root, &bin_name).or_else(|_| find_binary(project_root, &cfg.name))?;
 
     // 3. Create .app bundle and launch
-    let app_dir = create_app_bundle(project_root, &cfg.name, &cfg.bundle_id, &bin, &cfg.resources)?;
+    let app_dir = create_app_bundle(
+        project_root,
+        &cfg.name,
+        &cfg.bundle_id,
+        &bin,
+        &cfg.resources,
+    )?;
 
     println!("launching {}...", cfg.name);
     let mut cmd = Command::new("open");
     cmd.arg(&app_dir);
     if let Some(p) = dev_port {
         cmd.env("AURORALITY_DEV", "1")
-           .env("AURORALITY_DEV_PORT", p.to_string());
+            .env("AURORALITY_DEV_PORT", p.to_string());
     }
     cmd.spawn().map_err(|e| anyhow::anyhow!("open: {e}"))?;
 
@@ -214,7 +237,13 @@ pub fn build_and_launch(project_root: &Path, dev_port: Option<u16>) -> Result<()
     Ok(())
 }
 
-fn create_app_bundle(project_root: &Path, name: &str, bundle_id: &str, bin: &Path, resources: &[String]) -> Result<PathBuf> {
+fn create_app_bundle(
+    project_root: &Path,
+    name: &str,
+    bundle_id: &str,
+    bin: &Path,
+    resources: &[String],
+) -> Result<PathBuf> {
     let app_name = format!("{}.app", name);
     let app_dir = project_root.join(".build").join(&app_name);
     let macos_dir = app_dir.join("Contents/MacOS");
@@ -296,10 +325,7 @@ fn package_name(project_root: &Path) -> Option<String> {
 
 fn find_binary(project_root: &Path, name: &str) -> Result<PathBuf> {
     // Try debug build
-    let debug = project_root
-        .join(".build")
-        .join("debug")
-        .join(name);
+    let debug = project_root.join(".build").join("debug").join(name);
     if debug.exists() {
         return Ok(debug);
     }
