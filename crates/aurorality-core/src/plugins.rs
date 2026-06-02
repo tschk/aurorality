@@ -63,6 +63,60 @@ impl NativePlugin for CorePlugin {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stats_analyze_empty() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 0);
+        assert_eq!(result["charCount"], 0);
+        assert_eq!(result["lineCount"], 0);
+        assert_eq!(result["topWord"], "");
+        assert_eq!(result["topWordCount"], 0);
+    }
+
+    #[test]
+    fn test_stats_analyze_simple() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "hello hello world" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 3);
+        assert_eq!(result["charCount"], 17);
+        assert_eq!(result["lineCount"], 1);
+        assert_eq!(result["topWord"], "hello");
+        assert_eq!(result["topWordCount"], 2);
+    }
+
+    #[test]
+    fn test_stats_analyze_multiline() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "line one\nline two\nline three" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 6);
+        assert_eq!(result["charCount"], 28);
+        assert_eq!(result["lineCount"], 3);
+        assert_eq!(result["topWord"], "line");
+        assert_eq!(result["topWordCount"], 3);
+    }
+
+    #[test]
+    fn test_stats_analyze_punctuation() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "Wait, wait! Don't tell me... wait." });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["topWord"], "wait");
+        assert_eq!(result["topWordCount"], 3);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AppPlugin
 // ---------------------------------------------------------------------------
