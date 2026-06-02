@@ -469,4 +469,48 @@ mod tests {
         assert_eq!(truncate("hello", 10), "hello");
         assert_eq!(truncate("hello world", 5), "hello…");
     }
+
+    #[test]
+    fn is_leap_works() {
+        // Regular leap years
+        assert!(is_leap(2004));
+        assert!(is_leap(2024));
+
+        // Century leap years
+        assert!(is_leap(2000));
+        assert!(is_leap(2400));
+
+        // Regular non-leap years
+        assert!(!is_leap(2001));
+        assert!(!is_leap(2023));
+
+        // Century non-leap years
+        assert!(!is_leap(1900));
+        assert!(!is_leap(2100));
+    }
+
+    #[test]
+    fn days_per_month_works() {
+        // First day of the year (day 0) -> Jan 1
+        assert_eq!(days_per_month(2023, 0), (1, 1));
+
+        // Last day of January (day 30) -> Jan 31
+        assert_eq!(days_per_month(2023, 30), (1, 31));
+
+        // First day of February (day 31) -> Feb 1
+        assert_eq!(days_per_month(2023, 31), (2, 1));
+
+        // Leap year Feb 29 (day 59 in leap year) -> Feb 29
+        assert_eq!(days_per_month(2024, 59), (2, 29));
+
+        // Leap year Mar 1 (day 60 in leap year) -> Mar 1
+        assert_eq!(days_per_month(2024, 60), (3, 1));
+
+        // Non-leap year Mar 1 (day 59 in non-leap year) -> Mar 1
+        assert_eq!(days_per_month(2023, 59), (3, 1));
+
+        // Last day of the year (day 364 for non-leap, 365 for leap) -> Dec 31
+        assert_eq!(days_per_month(2023, 364), (12, 31));
+        assert_eq!(days_per_month(2024, 365), (12, 31));
+    }
 }
