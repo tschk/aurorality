@@ -23,7 +23,13 @@ fn capitalize_words(s: &str) -> String {
             capitalize_next = true;
             result.push(ch);
         } else if capitalize_next {
-            result.extend(ch.to_uppercase());
+            if ch.is_ascii() {
+                result.push(ch.to_ascii_uppercase());
+            } else {
+                for c in ch.to_uppercase() {
+                    result.push(c);
+                }
+            }
             capitalize_next = false;
         } else {
             result.push(ch);
