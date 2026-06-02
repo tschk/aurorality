@@ -75,3 +75,88 @@ pub fn store_set(bundle_id: String, key: String, json: String) -> Result<(), Aur
     map.insert(key, parsed);
     save_map(&path, &map)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn get_mock_bundle_id(test_name: &str) -> String {
+        format!("test.aurorality.store.{}", test_name)
+    }
+
+    fn cleanup_mock_bundle(bundle_id: &str) {
+        let path = application_support_file(bundle_id);
+        let _ = fs::remove_file(&path);
+        if let Some(dir) = path.parent() {
+            // Only try to remove the specific test's mock bundle directory,
+            // ignore if it fails (e.g. if we didn't create it or it has other stuff).
+            // Actually, `application_support_file` creates `.../<bundle_id>/aurorality-store.json`
+            // So `path.parent()` is `.../<bundle_id>` which is uniquely for this test.
+            let _ = fs::remove_dir(dir);
+        }
+    }
+
+    #[test]
+    fn test_store_set_and_get() {
+        let bundle_id = get_mock_bundle_id("set_and_get");
+        let key = "my_key".to_string();
+        let value_json = r#"{"hello":"world"}"#.to_string();
+
+        // Ensure clean state
+        cleanup_mock_bundle(&bundle_id);
+
+        // Store set
+        assert!(store_set(bundle_id.clone(), key.clone(), value_json.clone()).is_ok());
+
+        // Store get
+        let result = store_get(bundle_id.clone(), key);
+        assert!(result.is_ok());
+        let fetched_val = result.unwrap();
+        assert!(fetched_val.is_some());
+
+        // The value returned is serialized by serde_json, formatting might slightly differ
+        let parsed_fetched: serde_json::Value = serde_json::from_str(&fetched_val.unwrap()).unwrap();
+        let parsed_original: serde_json::Value = serde_json::from_str(&value_json).unwrap();
+        assert_eq!(parsed_fetched, parsed_original);
+
+        // Cleanup
+        cleanup_mock_bundle(&bundle_id);
+    }
+
+    #[test]
+    fn test_store_get_nonexistent_key() {
+        let bundle_id = get_mock_bundle_id("nonexistent_key");
+
+        // Ensure clean state
+        cleanup_mock_bundle(&bundle_id);
+
+        let result = store_get(bundle_id.clone(), "missing".to_string());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None);
+
+        // Cleanup
+        cleanup_mock_bundle(&bundle_id);
+    }
+
+    #[test]
+    fn test_store_set_invalid_json() {
+        let bundle_id = get_mock_bundle_id("invalid_json");
+        let key = "my_key".to_string();
+        let invalid_json = "{not_valid_json}".to_string();
+
+        // Ensure clean state
+        cleanup_mock_bundle(&bundle_id);
+
+        let result = store_set(bundle_id.clone(), key.clone(), invalid_json);
+        assert!(result.is_err());
+        if let Err(AurorError::PluginError { message }) = result {
+            assert!(message.contains("store_set JSON"));
+        } else {
+            panic!("Expected PluginError");
+        }
+
+        // Cleanup
+        cleanup_mock_bundle(&bundle_id);
+    }
+}
