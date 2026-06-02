@@ -25,14 +25,17 @@ fn context_from_json(json: &str) -> Result<TemplateContext, AurorError> {
         message: e.to_string(),
     })?;
 
-    let obj = v.as_object().ok_or_else(|| AurorError::InvalidContext {
-        message: "context_json must be a JSON object".to_string(),
-    })?;
+    let obj = match v {
+        Value::Object(o) => o,
+        _ => return Err(AurorError::InvalidContext {
+            message: "context_json must be a JSON object".to_string(),
+        }),
+    };
 
     let mut ctx = TemplateContext::new();
     for (k, v) in obj {
         if let Some(tv) = json_value_to_template_value(v) {
-            ctx.vars.insert(k.clone(), tv);
+            ctx.vars.insert(k, tv);
         }
     }
     Ok(ctx)
@@ -42,9 +45,9 @@ fn context_from_json(json: &str) -> Result<TemplateContext, AurorError> {
 /// Arrays of objects become `List(Vec<TemplateContext>)` — each object's
 /// fields become that context's variables.  Arrays of primitives and nested
 /// objects are not supported by the template engine; they are silently dropped.
-fn json_value_to_template_value(v: &Value) -> Option<TemplateValue> {
+fn json_value_to_template_value(v: Value) -> Option<TemplateValue> {
     match v {
-        Value::Bool(b) => Some(TemplateValue::Bool(*b)),
+        Value::Bool(b) => Some(TemplateValue::Bool(b)),
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 Some(TemplateValue::Int(i))
@@ -52,20 +55,22 @@ fn json_value_to_template_value(v: &Value) -> Option<TemplateValue> {
                 n.as_f64().map(TemplateValue::Float)
             }
         }
-        Value::String(s) => Some(TemplateValue::Str(s.clone())),
+        Value::String(s) => Some(TemplateValue::Str(s)),
         Value::Array(arr) => {
             let contexts: Vec<TemplateContext> = arr
-                .iter()
+                .into_iter()
                 .filter_map(|item| {
-                    item.as_object().map(|obj| {
+                    if let Value::Object(obj) = item {
                         let mut child = TemplateContext::new();
                         for (k, v) in obj {
                             if let Some(tv) = json_value_to_template_value(v) {
-                                child.vars.insert(k.clone(), tv);
+                                child.vars.insert(k, tv);
                             }
                         }
-                        child
-                    })
+                        Some(child)
+                    } else {
+                        None
+                    }
                 })
                 .collect();
             Some(TemplateValue::List(contexts))
