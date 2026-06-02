@@ -180,24 +180,37 @@ impl MatrixClient {
         let url = self
             .server_url("sync")
             .ok_or("Matrix homeserver not configured")?;
-        let sync: Value = self.auth_get(&url)?;
+        let mut sync: Value = self.auth_get(&url)?;
 
         let mut messages = Vec::new();
         let room_id = self.room_id.as_deref().unwrap_or("");
-        if let Some(timeline) = sync["rooms"]["join"][room_id]["timeline"]["events"].as_array() {
-            for event in timeline {
-                if event["type"].as_str() == Some("m.room.message") {
-                    let body = event["content"]["body"]
-                        .as_str()
-                        .unwrap_or("(empty)")
-                        .to_string();
-                    messages.push(TransportMessage {
-                        id: event["event_id"].as_str().unwrap_or("?").to_string(),
-                        text: body,
-                        transport: "matrix".to_string(),
-                        status: "synced".to_string(),
-                        metadata: event.clone(),
-                    });
+        if let Some(rooms) = sync.get_mut("rooms") {
+            if let Some(join) = rooms.get_mut("join") {
+                if let Some(room) = join.get_mut(room_id) {
+                    if let Some(timeline) = room.get_mut("timeline") {
+                        if let Some(events) = timeline.get_mut("events") {
+                            if let Value::Array(timeline_arr) = events.take() {
+                                for event in timeline_arr {
+                                    if event["type"].as_str() == Some("m.room.message") {
+                                        let body = event["content"]["body"]
+                                            .as_str()
+                                            .unwrap_or("(empty)")
+                                            .to_string();
+                                        messages.push(TransportMessage {
+                                            id: event["event_id"]
+                                                .as_str()
+                                                .unwrap_or("?")
+                                                .to_string(),
+                                            text: body,
+                                            transport: "matrix".to_string(),
+                                            status: "synced".to_string(),
+                                            metadata: event,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
