@@ -159,9 +159,11 @@ public final class HyperChatModel {
             return conversations[i].id
         }
         conversations.remove(atOffsets: offsets)
+        var localThreadMessages = threadMessages
         for id in removedIds {
-            threadMessages.removeValue(forKey: id)
+            localThreadMessages.removeValue(forKey: id)
         }
+        threadMessages = localThreadMessages
         if let sel = selectedConversationId, removedIds.contains(sel) {
             selectedConversationId = conversations.first?.id
         }
