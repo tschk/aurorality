@@ -127,19 +127,23 @@ impl NativePlugin for StatsPlugin {
                 let word_count = words.len();
 
                 // frequency count
-                let mut freq: HashMap<String, usize> = HashMap::new();
+                let mut freq: HashMap<std::borrow::Cow<'_, str>, usize> = HashMap::new();
                 for w in &words {
-                    let key = w
-                        .trim_matches(|c: char| !c.is_alphanumeric())
-                        .to_lowercase();
-                    if !key.is_empty() {
-                        *freq.entry(key).or_insert(0) += 1;
+                    let trimmed = w.trim_matches(|c: char| !c.is_alphanumeric());
+                    if trimmed.is_empty() {
+                        continue;
                     }
+                    let key = if trimmed.chars().any(char::is_uppercase) {
+                        std::borrow::Cow::Owned(trimmed.to_lowercase())
+                    } else {
+                        std::borrow::Cow::Borrowed(trimmed)
+                    };
+                    *freq.entry(key).or_insert(0) += 1;
                 }
                 let (top_word, top_count) = freq
                     .iter()
                     .max_by_key(|(_, &c)| c)
-                    .map(|(w, &c)| (w.as_str().to_string(), c))
+                    .map(|(w, &c)| (w.to_string(), c))
                     .unwrap_or_default();
 
                 Ok(json!({
