@@ -11,6 +11,37 @@ use serde_json::Value;
 
 const TRANSPORT_ID: &str = "stalwart";
 
+use std::sync::{Mutex, OnceLock};
+
+static STALWART_CONFIG: OnceLock<Mutex<StalwartClient>> = OnceLock::new();
+
+pub fn set_stalwart_config(
+    base_url: String,
+    username: Option<String>,
+    password: Option<String>,
+) {
+    let client = StalwartClient {
+        base_url: if base_url.trim().is_empty() { "http://localhost:8080".to_string() } else { base_url },
+        username: username.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        password: password.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        api_url: None,
+        account_id: None,
+    };
+
+    let mut config = STALWART_CONFIG
+        .get_or_init(|| Mutex::new(StalwartClient {
+            base_url: "http://localhost:8080".to_string(),
+            username: None,
+            password: None,
+            api_url: None,
+            account_id: None,
+        }))
+        .lock()
+        .unwrap();
+
+    *config = client;
+}
+
 #[derive(Clone)]
 pub struct StalwartClient {
     base_url: String,
@@ -21,17 +52,18 @@ pub struct StalwartClient {
 }
 
 impl StalwartClient {
-    pub fn from_env() -> Self {
-        let base_url = std::env::var("STALWART_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:8080".to_string());
-
-        Self {
-            base_url,
-            username: std::env::var("STALWART_USERNAME").ok(),
-            password: std::env::var("STALWART_PASSWORD").ok(),
-            api_url: None,
-            account_id: None,
-        }
+    pub fn current() -> Self {
+        STALWART_CONFIG
+            .get_or_init(|| Mutex::new(StalwartClient {
+                base_url: "http://localhost:8080".to_string(),
+                username: None,
+                password: None,
+                api_url: None,
+                account_id: None,
+            }))
+            .lock()
+            .unwrap()
+            .clone()
     }
 
     #[allow(dead_code)]
@@ -506,7 +538,7 @@ mod tests {
 
     #[test]
     fn stalwart_info() {
-        let client = StalwartClient::from_env();
+        let client = StalwartClient::current();
         let result = client.invoke("info", &serde_json::json!({})).unwrap();
         let info: TransportInfo = serde_json::from_value(result).unwrap();
         assert_eq!(info.id, "stalwart");

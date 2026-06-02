@@ -30,6 +30,37 @@ struct JoinRooms {
     join: Value,
 }
 
+use std::sync::{Mutex, OnceLock};
+
+static MATRIX_CONFIG: OnceLock<Mutex<MatrixClient>> = OnceLock::new();
+
+pub fn set_matrix_config(
+    homeserver: Option<String>,
+    user_id: Option<String>,
+    access_token: Option<String>,
+    room_id: Option<String>,
+) {
+    let client = MatrixClient {
+        homeserver: homeserver.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        user_id: user_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        access_token: access_token.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        room_id: room_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+    };
+
+    let mut config = MATRIX_CONFIG
+        .get_or_init(|| Mutex::new(MatrixClient {
+            homeserver: None,
+            user_id: None,
+            access_token: None,
+            room_id: None,
+        }))
+        .lock()
+        .unwrap();
+
+    *config = client;
+}
+
+#[derive(Clone)]
 pub struct MatrixClient {
     homeserver: Option<String>,
     #[allow(dead_code)]
@@ -39,13 +70,17 @@ pub struct MatrixClient {
 }
 
 impl MatrixClient {
-    pub fn from_env() -> Self {
-        Self {
-            homeserver: std::env::var("MATRIX_HOMESERVER").ok(),
-            user_id: std::env::var("MATRIX_USER_ID").ok(),
-            access_token: std::env::var("MATRIX_ACCESS_TOKEN").ok(),
-            room_id: std::env::var("MATRIX_ROOM_ID").ok(),
-        }
+    pub fn current() -> Self {
+        MATRIX_CONFIG
+            .get_or_init(|| Mutex::new(MatrixClient {
+                homeserver: None,
+                user_id: None,
+                access_token: None,
+                room_id: None,
+            }))
+            .lock()
+            .unwrap()
+            .clone()
     }
 
     #[allow(dead_code)]
@@ -304,7 +339,7 @@ mod tests {
 
     #[test]
     fn matrix_info() {
-        let client = MatrixClient::from_env();
+        let client = MatrixClient::current();
         let result = client.invoke("info", &serde_json::json!({})).unwrap();
         let info: TransportInfo = serde_json::from_value(result).unwrap();
         assert_eq!(info.id, "matrix");
