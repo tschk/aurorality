@@ -200,6 +200,107 @@ impl StalwartClient {
 
         Ok(resp["methodResponses"][0][1].clone())
     }
+
+    fn handle_info(&self) -> Result<Value, String> {
+        let info = TransportInfo {
+            id: TRANSPORT_ID.to_string(),
+            name: "Stalwart Archive".to_string(),
+            role: "archive".to_string(),
+            trust: if self.configured() {
+                "configured".to_string()
+            } else {
+                "unconfigured".to_string()
+            },
+            latency: 10,
+        };
+        Ok(serde_json::to_value(&info).unwrap_or_default())
+    }
+
+    fn handle_health(&mut self) -> Result<Value, String> {
+        if !self.configured() {
+            let health = TransportHealth {
+                id: TRANSPORT_ID.to_string(),
+                name: "Stalwart Archive".to_string(),
+                role: "archive".to_string(),
+                connected: false,
+                latency_ms: 0,
+                last_error: Some("credentials not configured".to_string()),
+            };
+            return Ok(serde_json::to_value(&health).unwrap_or_default());
+        }
+
+        let start = std::time::Instant::now();
+        match self.jmap_echo() {
+            Ok(true) => {
+                let latency = start.elapsed().as_millis() as u64;
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: true,
+                    latency_ms: latency,
+                    last_error: None,
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+            Ok(false) => {
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: false,
+                    latency_ms: 0,
+                    last_error: Some("JMAP echo returned unexpected response".to_string()),
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+            Err(e) => {
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: false,
+                    latency_ms: 0,
+                    last_error: Some(e),
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+        }
+    }
+
+    fn handle_list(&mut self) -> Result<Value, String> {
+        match self.list_messages() {
+            Ok(messages) => Ok(envelope_ok(
+                serde_json::to_value(&messages).unwrap_or_default(),
+            )),
+            Err(e) => {
+                if !self.configured() {
+                    Ok(envelope_ok(serde_json::json!([])))
+                } else {
+                    Ok(envelope_err(&e))
+                }
+            }
+        }
+    }
+
+    fn handle_send(&mut self, payload: &Value) -> Result<Value, String> {
+        let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        if text.is_empty() {
+            return Ok(envelope_ok(
+                serde_json::json!({"accepted": false, "reason": "empty"}),
+            ));
+        }
+        if !self.configured() {
+            return Ok(envelope_ok(serde_json::json!({
+                "accepted": false,
+                "reason": "stalwart not configured"
+            })));
+        }
+        match self.archive_message(text) {
+            Ok(resp) => Ok(envelope_ok(resp)),
+            Err(e) => Ok(envelope_err(&e)),
+        }
+    }
 }
 
 impl NativePlugin for StalwartClient {
@@ -219,101 +320,10 @@ impl NativePlugin for StalwartClient {
         let mut this = self.clone_lite();
 
         match method {
-            "info" => {
-                let info = TransportInfo {
-                    id: TRANSPORT_ID.to_string(),
-                    name: "Stalwart Archive".to_string(),
-                    role: "archive".to_string(),
-                    trust: if this.configured() {
-                        "configured".to_string()
-                    } else {
-                        "unconfigured".to_string()
-                    },
-                    latency: 10,
-                };
-                Ok(serde_json::to_value(&info).unwrap_or_default())
-            }
-            "health" => {
-                if !this.configured() {
-                    let health = TransportHealth {
-                        id: TRANSPORT_ID.to_string(),
-                        name: "Stalwart Archive".to_string(),
-                        role: "archive".to_string(),
-                        connected: false,
-                        latency_ms: 0,
-                        last_error: Some("credentials not configured".to_string()),
-                    };
-                    return Ok(serde_json::to_value(&health).unwrap_or_default());
-                }
-
-                let start = std::time::Instant::now();
-                match this.jmap_echo() {
-                    Ok(true) => {
-                        let latency = start.elapsed().as_millis() as u64;
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: true,
-                            latency_ms: latency,
-                            last_error: None,
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                    Ok(false) => {
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: false,
-                            latency_ms: 0,
-                            last_error: Some("JMAP echo returned unexpected response".to_string()),
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                    Err(e) => {
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: false,
-                            latency_ms: 0,
-                            last_error: Some(e),
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                }
-            }
-            "list" => match this.list_messages() {
-                Ok(messages) => Ok(envelope_ok(
-                    serde_json::to_value(&messages).unwrap_or_default(),
-                )),
-                Err(e) => {
-                    if !this.configured() {
-                        Ok(envelope_ok(serde_json::json!([])))
-                    } else {
-                        Ok(envelope_err(&e))
-                    }
-                }
-            },
-            "send" => {
-                let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                if text.is_empty() {
-                    return Ok(envelope_ok(
-                        serde_json::json!({"accepted": false, "reason": "empty"}),
-                    ));
-                }
-                if !this.configured() {
-                    return Ok(envelope_ok(serde_json::json!({
-                        "accepted": false,
-                        "reason": "stalwart not configured"
-                    })));
-                }
-                match this.archive_message(text) {
-                    Ok(resp) => Ok(envelope_ok(resp)),
-                    Err(e) => Ok(envelope_err(&e)),
-                }
-            }
+            "info" => this.handle_info(),
+            "health" => this.handle_health(),
+            "list" => this.handle_list(),
+            "send" => this.handle_send(payload),
             _ => Err(format!("unknown stalwart method: {method}")),
         }
     }
@@ -468,5 +478,49 @@ mod tests {
     fn truncate_works() {
         assert_eq!(truncate("hello", 10), "hello");
         assert_eq!(truncate("hello world", 5), "hello…");
+    }
+
+    #[test]
+    fn is_leap_works() {
+        // Regular leap years
+        assert!(is_leap(2004));
+        assert!(is_leap(2024));
+
+        // Century leap years
+        assert!(is_leap(2000));
+        assert!(is_leap(2400));
+
+        // Regular non-leap years
+        assert!(!is_leap(2001));
+        assert!(!is_leap(2023));
+
+        // Century non-leap years
+        assert!(!is_leap(1900));
+        assert!(!is_leap(2100));
+    }
+
+    #[test]
+    fn days_per_month_works() {
+        // First day of the year (day 0) -> Jan 1
+        assert_eq!(days_per_month(2023, 0), (1, 1));
+
+        // Last day of January (day 30) -> Jan 31
+        assert_eq!(days_per_month(2023, 30), (1, 31));
+
+        // First day of February (day 31) -> Feb 1
+        assert_eq!(days_per_month(2023, 31), (2, 1));
+
+        // Leap year Feb 29 (day 59 in leap year) -> Feb 29
+        assert_eq!(days_per_month(2024, 59), (2, 29));
+
+        // Leap year Mar 1 (day 60 in leap year) -> Mar 1
+        assert_eq!(days_per_month(2024, 60), (3, 1));
+
+        // Non-leap year Mar 1 (day 59 in non-leap year) -> Mar 1
+        assert_eq!(days_per_month(2023, 59), (3, 1));
+
+        // Last day of the year (day 364 for non-leap, 365 for leap) -> Dec 31
+        assert_eq!(days_per_month(2023, 364), (12, 31));
+        assert_eq!(days_per_month(2024, 365), (12, 31));
     }
 }

@@ -67,9 +67,7 @@ pub fn container_modifiers(classes: &[String], for_scroll: bool) -> String {
             color_expr(stroke)
         ));
     }
-    if classes.iter().any(|c| c == "flex-grow" || c == "flex-1") {
-        s.push_str("\n            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)");
-    } else if for_scroll {
+    if for_scroll || classes.iter().any(|c| c == "flex-grow" || c == "flex-1") {
         s.push_str("\n            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)");
     }
     if let Some(fr) = width_frame(classes) {

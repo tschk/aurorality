@@ -127,19 +127,23 @@ impl NativePlugin for StatsPlugin {
                 let word_count = words.len();
 
                 // frequency count
-                let mut freq: HashMap<String, usize> = HashMap::new();
+                let mut freq: HashMap<std::borrow::Cow<'_, str>, usize> = HashMap::new();
                 for w in &words {
-                    let key = w
-                        .trim_matches(|c: char| !c.is_alphanumeric())
-                        .to_lowercase();
-                    if !key.is_empty() {
-                        *freq.entry(key).or_insert(0) += 1;
+                    let trimmed = w.trim_matches(|c: char| !c.is_alphanumeric());
+                    if trimmed.is_empty() {
+                        continue;
                     }
+                    let key = if trimmed.chars().any(char::is_uppercase) {
+                        std::borrow::Cow::Owned(trimmed.to_lowercase())
+                    } else {
+                        std::borrow::Cow::Borrowed(trimmed)
+                    };
+                    *freq.entry(key).or_insert(0) += 1;
                 }
                 let (top_word, top_count) = freq
                     .iter()
                     .max_by_key(|(_, &c)| c)
-                    .map(|(w, &c)| (w.as_str().to_string(), c))
+                    .map(|(w, &c)| (w.to_string(), c))
                     .unwrap_or_default();
 
                 Ok(json!({
@@ -156,5 +160,59 @@ impl NativePlugin for StatsPlugin {
             }
             _ => Err("method routed but not handled".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stats_analyze_empty() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 0);
+        assert_eq!(result["charCount"], 0);
+        assert_eq!(result["lineCount"], 0);
+        assert_eq!(result["topWord"], "");
+        assert_eq!(result["topWordCount"], 0);
+    }
+
+    #[test]
+    fn test_stats_analyze_simple() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "hello hello world" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 3);
+        assert_eq!(result["charCount"], 17);
+        assert_eq!(result["lineCount"], 1);
+        assert_eq!(result["topWord"], "hello");
+        assert_eq!(result["topWordCount"], 2);
+    }
+
+    #[test]
+    fn test_stats_analyze_multiline() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "line one\nline two\nline three" });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["wordCount"], 6);
+        assert_eq!(result["charCount"], 28);
+        assert_eq!(result["lineCount"], 3);
+        assert_eq!(result["topWord"], "line");
+        assert_eq!(result["topWordCount"], 3);
+    }
+
+    #[test]
+    fn test_stats_analyze_punctuation() {
+        let plugin = StatsPlugin;
+        let payload = json!({ "text": "Wait, wait! Don't tell me... wait." });
+        let result = plugin.invoke("analyze", &payload).unwrap();
+
+        assert_eq!(result["topWord"], "wait");
+        assert_eq!(result["topWordCount"], 3);
     }
 }

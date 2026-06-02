@@ -159,9 +159,11 @@ public final class HyperChatModel {
             return conversations[i].id
         }
         conversations.remove(atOffsets: offsets)
+        var localThreadMessages = threadMessages
         for id in removedIds {
-            threadMessages.removeValue(forKey: id)
+            localThreadMessages.removeValue(forKey: id)
         }
+        threadMessages = localThreadMessages
         if let sel = selectedConversationId, removedIds.contains(sel) {
             selectedConversationId = conversations.first?.id
         }
@@ -309,22 +311,17 @@ public final class HyperChatModel {
     }
 
     private func applyStoredTransportConfig() {
-        applyEnv("MATRIX_HOMESERVER", matrixHomeserver)
-        applyEnv("MATRIX_USER_ID", matrixUserId)
-        applyEnv("MATRIX_ACCESS_TOKEN", matrixAccessToken)
-        applyEnv("MATRIX_ROOM_ID", matrixRoomId)
-        applyEnv("STALWART_BASE_URL", stalwartBaseUrl)
-        applyEnv("STALWART_USERNAME", stalwartUsername)
-        applyEnv("STALWART_PASSWORD", stalwartPassword)
-    }
-
-    private func applyEnv(_ name: String, _ value: String) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            unsetenv(name)
-        } else {
-            setenv(name, trimmed, 1)
-        }
+        setMatrixConfig(
+            homeserver: matrixHomeserver,
+            userId: matrixUserId,
+            accessToken: matrixAccessToken,
+            roomId: matrixRoomId
+        )
+        setStalwartConfig(
+            baseUrl: stalwartBaseUrl,
+            username: stalwartUsername,
+            password: stalwartPassword
+        )
     }
 
     private func legacyStatusLine(title: String, status: TransportSidebarStatus) -> String {

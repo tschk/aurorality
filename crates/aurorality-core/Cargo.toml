@@ -28,3 +28,6 @@ crepuscularity-native = { workspace = true }
 crepuscularity-core = { workspace = true }
 thiserror = "2"
 ureq = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10.1"

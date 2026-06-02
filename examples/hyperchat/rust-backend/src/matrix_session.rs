@@ -15,7 +15,7 @@ struct MatrixSessionState {
 impl MatrixSessionState {
     fn new() -> Self {
         Self {
-            client: MatrixClient::from_env(),
+            client: MatrixClient::current(),
             since: None,
         }
     }
@@ -26,7 +26,7 @@ fn state() -> &'static Mutex<MatrixSessionState> {
     S.get_or_init(|| Mutex::new(MatrixSessionState::new()))
 }
 
-pub fn reload_from_env() {
+pub fn reload_transports() {
     let mut g = state().lock().expect("matrix session lock");
     *g = MatrixSessionState::new();
 }

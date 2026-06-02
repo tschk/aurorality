@@ -21,3 +21,10 @@ serde_json = { workspace = true }
 uniffi = { workspace = true }
 ureq = { workspace = true }
 base64 = "0.22"
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "matrix_bench"
+harness = false

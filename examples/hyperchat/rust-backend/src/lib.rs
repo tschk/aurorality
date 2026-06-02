@@ -15,43 +15,58 @@ fn json_result(result: Result<serde_json::Value, String>) -> String {
     }
 }
 
+#[eqswift::export]
+pub fn set_matrix_config(
+    homeserver: Option<String>,
+    user_id: Option<String>,
+    access_token: Option<String>,
+    room_id: Option<String>,
+) {
+    matrix::set_matrix_config(homeserver, user_id, access_token, room_id);
+}
+
+#[eqswift::export]
+pub fn set_stalwart_config(base_url: String, username: Option<String>, password: Option<String>) {
+    stalwart::set_stalwart_config(base_url, username, password);
+}
+
 /// Matrix Client-Server health snapshot as JSON (`MATRIX_*` env).
 #[eqswift::export]
 pub fn matrix_health_json() -> String {
-    let c = matrix::MatrixClient::from_env();
+    let c = matrix::MatrixClient::current();
     json_result(c.invoke("health", &serde_json::json!({})))
 }
 
 /// Send plain text to the configured Matrix room (`MATRIX_ROOM_ID`).
 #[eqswift::export]
 pub fn matrix_send_json(text: String) -> String {
-    let c = matrix::MatrixClient::from_env();
+    let c = matrix::MatrixClient::current();
     json_result(c.invoke("send", &serde_json::json!({ "text": text })))
 }
 
 /// Stalwart JMAP health snapshot (`STALWART_*` env).
 #[eqswift::export]
 pub fn stalwart_health_json() -> String {
-    let c = stalwart::StalwartClient::from_env();
+    let c = stalwart::StalwartClient::current();
     json_result(c.invoke("health", &serde_json::json!({})))
 }
 
 /// Archive a short text payload via Stalwart JMAP (`STALWART_*` env).
 #[eqswift::export]
 pub fn stalwart_send_json(text: String) -> String {
-    let c = stalwart::StalwartClient::from_env();
+    let c = stalwart::StalwartClient::current();
     json_result(c.invoke("send", &serde_json::json!({ "text": text })))
 }
 
 #[eqswift::export]
 pub fn stalwart_list_mailboxes_json() -> String {
-    let c = stalwart::StalwartClient::from_env();
+    let c = stalwart::StalwartClient::current();
     json_result(c.invoke("list_mailboxes", &serde_json::json!({})))
 }
 
 #[eqswift::export]
 pub fn stalwart_list_emails_json(mailbox_id: String, since: Option<String>) -> String {
-    let c = stalwart::StalwartClient::from_env();
+    let c = stalwart::StalwartClient::current();
     json_result(c.invoke(
         "list_emails",
         &serde_json::json!({ "mailbox_id": mailbox_id, "since": since }),
@@ -75,7 +90,7 @@ pub fn bitchat_status_json() -> String {
 /// Reload Matrix / Stalwart clients from process environment (after Settings save).
 #[eqswift::export]
 pub fn reload_transports() {
-    matrix_session::reload_from_env();
+    matrix_session::reload_transports();
 }
 
 /// Joined Matrix rooms (`/_matrix/client/v3/joined_rooms`).
