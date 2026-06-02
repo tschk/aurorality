@@ -75,3 +75,65 @@ pub fn store_set(bundle_id: String, key: String, json: String) -> Result<(), Aur
     map.insert(key, parsed);
     save_map(&path, &map)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn get_temp_bundle_id() -> (tempfile::TempDir, String) {
+        let dir = tempdir().unwrap();
+        // Return absolute path so `PathBuf::join` replaces the prefix completely
+        let path = dir.path().to_string_lossy().into_owned();
+        (dir, path)
+    }
+
+    #[test]
+    fn test_store_roundtrip() {
+        let (_dir, bundle_id) = get_temp_bundle_id();
+        let key = "test_key".to_string();
+
+        // Initially None
+        assert_eq!(store_get(bundle_id.clone(), key.clone()).unwrap(), None);
+
+        // Set value
+        let json = r#"{"hello": "world"}"#.to_string();
+        store_set(bundle_id.clone(), key.clone(), json).unwrap();
+
+        // Get value
+        let result = store_get(bundle_id.clone(), key).unwrap().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["hello"], "world");
+    }
+
+    #[test]
+    fn test_store_nonexistent_key() {
+        let (_dir, bundle_id) = get_temp_bundle_id();
+        assert_eq!(store_get(bundle_id, "missing_key".to_string()).unwrap(), None);
+    }
+
+    #[test]
+    fn test_store_invalid_json() {
+        let (_dir, bundle_id) = get_temp_bundle_id();
+        let err = store_set(bundle_id, "key".to_string(), "invalid".to_string()).unwrap_err();
+        assert!(matches!(err, AurorError::PluginError { .. }));
+    }
+
+    #[test]
+    fn test_store_update_existing_key() {
+        let (_dir, bundle_id) = get_temp_bundle_id();
+        let key = "update_key".to_string();
+
+        store_set(bundle_id.clone(), key.clone(), r#"{"val": 1}"#.to_string()).unwrap();
+
+        let result1 = store_get(bundle_id.clone(), key.clone()).unwrap().unwrap();
+        let parsed1: serde_json::Value = serde_json::from_str(&result1).unwrap();
+        assert_eq!(parsed1["val"], 1);
+
+        store_set(bundle_id.clone(), key.clone(), r#"{"val": 2}"#.to_string()).unwrap();
+
+        let result2 = store_get(bundle_id, key).unwrap().unwrap();
+        let parsed2: serde_json::Value = serde_json::from_str(&result2).unwrap();
+        assert_eq!(parsed2["val"], 2);
+    }
+}

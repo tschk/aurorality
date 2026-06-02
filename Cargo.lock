@@ -138,6 +138,7 @@ dependencies = [
  "eqswift",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "uniffi",
  "ureq",
