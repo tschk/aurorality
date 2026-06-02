@@ -265,127 +265,141 @@ impl StalwartClient {
         Ok(serde_json::json!({ "emails": list }))
     }
 
+    fn handle_info(&self) -> Result<Value, String> {
+        let info = TransportInfo {
+            id: TRANSPORT_ID.to_string(),
+            name: "Stalwart Archive".to_string(),
+            role: "archive".to_string(),
+            trust: if self.configured() {
+                "configured".to_string()
+            } else {
+                "unconfigured".to_string()
+            },
+            latency: 10,
+        };
+        Ok(serde_json::to_value(&info).unwrap_or_default())
+    }
+
+    fn handle_health(&mut self) -> Result<Value, String> {
+        if !self.configured() {
+            let health = TransportHealth {
+                id: TRANSPORT_ID.to_string(),
+                name: "Stalwart Archive".to_string(),
+                role: "archive".to_string(),
+                connected: false,
+                latency_ms: 0,
+                last_error: Some("credentials not configured".to_string()),
+            };
+            return Ok(serde_json::to_value(&health).unwrap_or_default());
+        }
+
+        let start = std::time::Instant::now();
+        match self.jmap_echo() {
+            Ok(true) => {
+                let latency = start.elapsed().as_millis() as u64;
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: true,
+                    latency_ms: latency,
+                    last_error: None,
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+            Ok(false) => {
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: false,
+                    latency_ms: 0,
+                    last_error: Some("JMAP echo returned unexpected response".to_string()),
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+            Err(e) => {
+                let health = TransportHealth {
+                    id: TRANSPORT_ID.to_string(),
+                    name: "Stalwart Archive".to_string(),
+                    role: "archive".to_string(),
+                    connected: false,
+                    latency_ms: 0,
+                    last_error: Some(e),
+                };
+                Ok(serde_json::to_value(&health).unwrap_or_default())
+            }
+        }
+    }
+
+    fn handle_list(&mut self) -> Result<Value, String> {
+        match self.list_messages() {
+            Ok(messages) => Ok(envelope_ok(
+                serde_json::to_value(&messages).unwrap_or_default(),
+            )),
+            Err(e) => {
+                if !self.configured() {
+                    Ok(envelope_ok(serde_json::json!([])))
+                } else {
+                    Ok(envelope_err(&e))
+                }
+            }
+        }
+    }
+
+    fn handle_send(&mut self, payload: &Value) -> Result<Value, String> {
+        let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        if text.is_empty() {
+            return Ok(envelope_ok(
+                serde_json::json!({"accepted": false, "reason": "empty"}),
+            ));
+        }
+        if !self.configured() {
+            return Ok(envelope_ok(serde_json::json!({
+                "accepted": false,
+                "reason": "stalwart not configured"
+            })));
+        }
+        match self.archive_message(text) {
+            Ok(resp) => Ok(envelope_ok(resp)),
+            Err(e) => Ok(envelope_err(&e)),
+        }
+    }
+
+    fn handle_list_mailboxes(&mut self) -> Result<Value, String> {
+        if !self.configured() {
+            return Ok(serde_json::json!({ "mailboxes": [] }));
+        }
+        self.list_mailboxes_json().or_else(|e| Ok(envelope_err(&e)))
+    }
+
+    fn handle_list_emails(&mut self, payload: &Value) -> Result<Value, String> {
+        if !self.configured() {
+            return Ok(serde_json::json!({ "emails": [] }));
+        }
+        let mailbox_id = payload
+            .get("mailbox_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let since = payload
+            .get("since")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        self.list_emails_json(mailbox_id, since)
+            .or_else(|e| Ok(envelope_err(&e)))
+    }
+
     pub fn invoke(&self, method: &str, payload: &Value) -> Result<Value, String> {
         let mut this = self.clone_lite();
 
         match method {
-            "info" => {
-                let info = TransportInfo {
-                    id: TRANSPORT_ID.to_string(),
-                    name: "Stalwart Archive".to_string(),
-                    role: "archive".to_string(),
-                    trust: if this.configured() {
-                        "configured".to_string()
-                    } else {
-                        "unconfigured".to_string()
-                    },
-                    latency: 10,
-                };
-                Ok(serde_json::to_value(&info).unwrap_or_default())
-            }
-            "health" => {
-                if !this.configured() {
-                    let health = TransportHealth {
-                        id: TRANSPORT_ID.to_string(),
-                        name: "Stalwart Archive".to_string(),
-                        role: "archive".to_string(),
-                        connected: false,
-                        latency_ms: 0,
-                        last_error: Some("credentials not configured".to_string()),
-                    };
-                    return Ok(serde_json::to_value(&health).unwrap_or_default());
-                }
-
-                let start = std::time::Instant::now();
-                match this.jmap_echo() {
-                    Ok(true) => {
-                        let latency = start.elapsed().as_millis() as u64;
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: true,
-                            latency_ms: latency,
-                            last_error: None,
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                    Ok(false) => {
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: false,
-                            latency_ms: 0,
-                            last_error: Some("JMAP echo returned unexpected response".to_string()),
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                    Err(e) => {
-                        let health = TransportHealth {
-                            id: TRANSPORT_ID.to_string(),
-                            name: "Stalwart Archive".to_string(),
-                            role: "archive".to_string(),
-                            connected: false,
-                            latency_ms: 0,
-                            last_error: Some(e),
-                        };
-                        Ok(serde_json::to_value(&health).unwrap_or_default())
-                    }
-                }
-            }
-            "list" => match this.list_messages() {
-                Ok(messages) => Ok(envelope_ok(
-                    serde_json::to_value(&messages).unwrap_or_default(),
-                )),
-                Err(e) => {
-                    if !this.configured() {
-                        Ok(envelope_ok(serde_json::json!([])))
-                    } else {
-                        Ok(envelope_err(&e))
-                    }
-                }
-            },
-            "send" => {
-                let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                if text.is_empty() {
-                    return Ok(envelope_ok(
-                        serde_json::json!({"accepted": false, "reason": "empty"}),
-                    ));
-                }
-                if !this.configured() {
-                    return Ok(envelope_ok(serde_json::json!({
-                        "accepted": false,
-                        "reason": "stalwart not configured"
-                    })));
-                }
-                match this.archive_message(text) {
-                    Ok(resp) => Ok(envelope_ok(resp)),
-                    Err(e) => Ok(envelope_err(&e)),
-                }
-            }
-            "list_mailboxes" => {
-                if !this.configured() {
-                    return Ok(serde_json::json!({ "mailboxes": [] }));
-                }
-                this.list_mailboxes_json().or_else(|e| Ok(envelope_err(&e)))
-            }
-            "list_emails" => {
-                if !this.configured() {
-                    return Ok(serde_json::json!({ "emails": [] }));
-                }
-                let mailbox_id = payload
-                    .get("mailbox_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let since = payload
-                    .get("since")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                this.list_emails_json(mailbox_id, since)
-                    .or_else(|e| Ok(envelope_err(&e)))
-            }
+            "info" => this.handle_info(),
+            "health" => this.handle_health(),
+            "list" => this.handle_list(),
+            "send" => this.handle_send(payload),
+            "list_mailboxes" => this.handle_list_mailboxes(),
+            "list_emails" => this.handle_list_emails(payload),
             _ => Err(format!("unknown stalwart method: {method}")),
         }
     }
