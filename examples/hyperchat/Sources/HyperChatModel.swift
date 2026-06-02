@@ -275,7 +275,7 @@ public final class HyperChatModel {
     }
 
     public var stalwartBaseUrl: String {
-        defaults.string(forKey: keyPrefix + "stalwart.baseUrl") ?? "http://localhost:8080"
+        defaults.string(forKey: keyPrefix + "stalwart.baseUrl") ?? "https://localhost:8080"
     }
 
     public var stalwartUsername: String {
