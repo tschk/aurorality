@@ -540,20 +540,12 @@ fn first_text_parts<'a>(children: &'a [Node]) -> Option<&'a [TextPart]> {
     None
 }
 
-fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String> {
-    let tag = el.tag.to_ascii_lowercase();
-
-    // Semantic component layer for native SwiftUI tags. These coexist with utility-first
-    // layout (`div flex`, `div flex-col`, gaps, padding, etc.), so templates can mix
-    // declarative SwiftUI structure and Tailwind-style class composition in one engine.
-    //
-    // Supported semantic tags include:
-    // - Containers: navigationstack, navigationsplitview, sidebar, detail/content,
-    //   form, section, group, list, item, vstack/hstack/zstack, scrollview/scroll
-    // - Controls: button, toggle, picker, textfield/input, securefield, menu
-    // - Content: span/p, label, image, sf/sf-*, divider, spacer
-    // - Control flow is still handled by the AST nodes (if/for/match), unchanged.
-
+fn emit_custom_element(
+    tag: &str,
+    el: &Element,
+    cx: &GenCtx,
+    ind: usize,
+) -> anyhow::Result<Option<String>> {
     if tag == "notification" {
         let click = el
             .event_handlers
@@ -563,16 +555,16 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             .or_else(|| binding_value(el, "event"))
             .unwrap_or_default();
         let event_expr = event_handler_expr(&click, cx)?;
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}EmptyView().hidden()\n{}.onAppear {{ eventSink({}) }}",
             indent(ind),
             indent(ind),
             event_expr
-        ));
+        )));
     }
 
     if tag == "dockbadge" {
-        return Ok(format!("{}EmptyView()", indent(ind)));
+        return Ok(Some(format!("{}EmptyView()", indent(ind))));
     }
 
     if tag == "avatar" {
@@ -582,7 +574,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         let size = binding_value(el, "size").unwrap_or_else(|| "36".into());
         let sz: f64 = size.parse().unwrap_or(36.0);
         let font = (sz * 0.42).max(10.0);
-        return Ok(format!(
+        return Ok(Some(format!(
             r#"{}Text(String(String(describing: {}).prefix(1)).uppercased())
             .font(.system(size: {}, weight: .semibold))
             .foregroundStyle(Color.accentColor)
@@ -594,23 +586,23 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             font,
             sz,
             sz
-        ));
+        )));
     }
 
     if tag == "badge" {
         let parts = first_text_parts(&el.children)
             .ok_or_else(|| anyhow!("<badge> needs inline text (swiftgen limitation)"))?;
         let txt = emit_text(parts, cx, ind)?;
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}\n            .font(.caption2.weight(.semibold))\n            .padding(.horizontal, 6)\n            .padding(.vertical, 2)\n            .background(Color.accentColor)\n            .foregroundStyle(Color.white)\n            .clipShape(Capsule())",
             txt.trim_end()
-        ));
+        )));
     }
 
     if tag == "messagebubble" {
         let bind = sanitize_field_key(&binding_value(el, "bind").unwrap_or_else(|| "m".into()));
         let b = field_accessor(&bind, cx)?;
-        return Ok(format!(
+        return Ok(Some(format!(
             r#"{}Group {{
             if {b}.isOutgoing {{
                 HStack {{
@@ -643,7 +635,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         }}"#,
             indent(ind),
             b = b
-        ));
+        )));
     }
 
     if tag == "typingindicator" {
@@ -657,7 +649,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         } else {
             swift_string_literal(stripped.trim_matches(|c| c == '"' || c == '\''))
         };
-        return Ok(format!(
+        return Ok(Some(format!(
             r#"{}HStack(spacing: 6) {{
                 ProgressView()
                     .scaleEffect(0.65)
@@ -667,9 +659,18 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             }}"#,
             indent(ind),
             text_content
-        ));
+        )));
     }
 
+    Ok(None)
+}
+
+fn emit_container_element(
+    tag: &str,
+    el: &Element,
+    cx: &GenCtx,
+    ind: usize,
+) -> anyhow::Result<Option<String>> {
     if tag == "navigationsplitview" {
         let mut sidebar_nodes: Vec<Node> = Vec::new();
         let mut detail_nodes: Vec<Node> = Vec::new();
@@ -696,7 +697,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         let sidebar = emit_nodes_block(&sidebar_nodes, cx, ind + 4)?;
         let detail = emit_nodes_block(&detail_nodes, cx, ind + 4)?;
         let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}NavigationSplitView {{\n{}\n{}}} detail: {{\n{}\n{}}}{}",
             indent(ind),
             sidebar,
@@ -704,26 +705,174 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             detail,
             indent(ind),
             mods
-        ));
+        )));
     }
 
     if tag == "navigationstack" {
         let children = emit_nodes_block(&el.children, cx, ind + 4)?;
         let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}NavigationStack {{\n{}\n{}}}{}",
             indent(ind),
             children,
             indent(ind),
             mods
-        ));
+        )));
     }
 
+    if tag == "list" {
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        let list_extras = swiftgen_style::list_extras(&el.classes);
+        return Ok(Some(format!(
+            "{}List {{\n{}\n{}}}{}{}",
+            indent(ind),
+            children,
+            indent(ind),
+            list_extras,
+            mods
+        )));
+    }
+
+    if tag == "sidebar" {
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        return Ok(Some(format!(
+            "{}List {{\n{}\n{}}}\n{}{}.listStyle(.sidebar)",
+            indent(ind),
+            children,
+            indent(ind),
+            indent(ind),
+            mods
+        )));
+    }
+
+    if tag == "item" {
+        let click = el
+            .event_handlers
+            .iter()
+            .find(|h| h.event == "click")
+            .map(|h| h.handler.trim_matches('"').to_string())
+            .unwrap_or_default();
+        let row_body = emit_nodes_block(&el.children, cx, ind + 8)?;
+        let layout = swiftgen_style::container_modifiers(&el.classes, false);
+        if click.is_empty() {
+            return Ok(Some(format!(
+                "{}HStack(alignment: .top, spacing: 8) {{\n{}\n{}}}{}",
+                indent(ind),
+                row_body,
+                indent(ind),
+                layout
+            )));
+        }
+        let event_expr = event_handler_expr(&click, cx)?;
+        return Ok(Some(format!(
+            "{}Button {{\n{}eventSink({})\n{}}} label: {{\n{}\n{}}}\n{}.buttonStyle(.plain){}",
+            indent(ind),
+            indent(ind + 4),
+            event_expr,
+            indent(ind),
+            row_body,
+            indent(ind),
+            indent(ind),
+            layout
+        )));
+    }
+
+    if tag == "form" {
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        return Ok(Some(format!(
+            "{}Form {{\n{}\n{}}}{}",
+            indent(ind),
+            children,
+            indent(ind),
+            mods
+        )));
+    }
+
+    if tag == "group" {
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        return Ok(Some(format!(
+            "{}Group {{\n{}\n{}}}{}",
+            indent(ind),
+            children,
+            indent(ind),
+            mods
+        )));
+    }
+
+    if tag == "section" {
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let header = el
+            .bindings
+            .iter()
+            .find(|b| b.prop == "header")
+            .map(|b| {
+                b.value
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == '\'')
+                    .to_string()
+            })
+            .filter(|s| !s.is_empty());
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        if let Some(header_text) = header {
+            return Ok(Some(format!(
+                "{}Section {{\n{}\n{}}} header: {{\n{}Text(\"{}\")\n{}}}{}",
+                indent(ind),
+                children,
+                indent(ind),
+                indent(ind + 4),
+                escape_swift_string(&header_text),
+                indent(ind),
+                mods
+            )));
+        }
+        return Ok(Some(format!(
+            "{}Section {{\n{}\n{}}}{}",
+            indent(ind),
+            children,
+            indent(ind),
+            mods
+        )));
+    }
+
+    if tag == "vstack" || tag == "hstack" || tag == "zstack" {
+        let spacing = gap_points(&el.classes)
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "0".to_string());
+        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        let ctor = match tag {
+            "vstack" => format!("VStack(alignment: .leading, spacing: {spacing})"),
+            "hstack" => format!("HStack(alignment: .top, spacing: {spacing})"),
+            _ => "ZStack(alignment: .topLeading)".to_string(),
+        };
+        return Ok(Some(format!(
+            "{}{} {{\n{}\n{}}}{}",
+            indent(ind),
+            ctor,
+            children,
+            indent(ind),
+            mods
+        )));
+    }
+
+    Ok(None)
+}
+
+fn emit_control_element(
+    tag: &str,
+    el: &Element,
+    cx: &GenCtx,
+    ind: usize,
+) -> anyhow::Result<Option<String>> {
     if tag == "menu" {
         let title = binding_value(el, "title").unwrap_or_else(|| "Menu".to_string());
         let children = emit_nodes_block(&el.children, cx, ind + 8)?;
         let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}Menu {{\n{}\n{}}} label: {{\n{}Text(\"{}\")\n{}}}{}",
             indent(ind),
             children,
@@ -732,29 +881,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             escape_swift_string(&title),
             indent(ind),
             mods
-        ));
-    }
-
-    if tag == "label" {
-        let title = binding_value(el, "title")
-            .or_else(|| {
-                collect_inline_text(&el.children, cx)
-                    .ok()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-            })
-            .unwrap_or_default();
-        let symbol = binding_value(el, "symbol")
-            .or_else(|| binding_value(el, "icon"))
-            .unwrap_or_else(|| "circle".to_string());
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
-            "{}Label(\"{}\", systemImage: \"{}\"){}",
-            indent(ind),
-            escape_swift_string(&title),
-            escape_swift_string(&symbol),
-            mods
-        ));
+        )));
     }
 
     if tag == "toggle" {
@@ -775,61 +902,14 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             .unwrap_or_else(|| "Toggle".to_string());
         let field_get = field_accessor(&bind, cx)?;
         let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}Toggle(\"{}\", isOn: Binding(get: {{ {} }}, set: {{ eventSink(\"bind:{}:\\($0)\") }})){}",
             indent(ind),
             escape_swift_string(&label),
             field_get,
             bind,
             mods
-        ));
-    }
-
-    if tag == "image" {
-        let system = binding_value(el, "system")
-            .or_else(|| binding_value(el, "symbol"))
-            .or_else(|| {
-                binding_value(el, "name").and_then(|v| {
-                    if v.starts_with("sf-") {
-                        Some(v.trim_start_matches("sf-").replace('-', "."))
-                    } else {
-                        None
-                    }
-                })
-            });
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        if let Some(sym) = system {
-            return Ok(format!(
-                "{}Image(systemName: \"{}\"){}",
-                indent(ind),
-                escape_swift_string(&sym),
-                mods
-            ));
-        }
-        let asset = binding_value(el, "name").unwrap_or_else(|| "photo".to_string());
-        return Ok(format!(
-            "{}Image(\"{}\"){}",
-            indent(ind),
-            escape_swift_string(&asset),
-            mods
-        ));
-    }
-
-    if tag == "sf" || tag.starts_with("sf-") {
-        return emit_sf_symbol(el, cx, ind);
-    }
-
-    if tag == "span" || tag == "p" {
-        let parts = first_text_parts(&el.children).ok_or_else(|| {
-            anyhow!(
-                "<{}> must contain text (swiftgen span/p limitation)",
-                el.tag
-            )
-        })?;
-        let inner = emit_text(parts, cx, 0)?;
-        let trimmed = inner.trim_start();
-        let mods = swiftgen_style::text_modifiers(&el.classes);
-        return Ok(format!("{}{}{}", indent(ind), trimmed, mods));
+        )));
     }
 
     if tag == "button" {
@@ -855,7 +935,7 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         let disabled = binding_expression_optional(el, "disabled", cx)?
             .map(|e| format!("\n            .disabled({e})"))
             .unwrap_or_default();
-        return Ok(format!("{base}{extras}{layout}{disabled}"));
+        return Ok(Some(format!("{base}{extras}{layout}{disabled}")));
     }
 
     if tag == "input" || tag == "textfield" {
@@ -881,17 +961,17 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         let field_get = field_accessor(&bind, cx)?;
         let ph = format!("\"{}\"", escape_swift_string(&placeholder));
         if multiline {
-            return Ok(format!(
+            return Ok(Some(format!(
                 "{}TextEditor(text: Binding(get: {{ {} }}, set: {{ eventSink(\"bind:{}:\\($0)\") }}))",
                 indent(ind), field_get, bind
-            ));
+            )));
         }
         let base = format!(
             "{}TextField({}, text: Binding(get: {{ {} }}, set: {{ eventSink(\"bind:{}:\\($0)\") }}))",
             indent(ind), ph, field_get, bind
         );
         let extras = swiftgen_style::text_field_extras(&el.classes);
-        return Ok(format!("{base}{extras}"));
+        return Ok(Some(format!("{base}{extras}")));
     }
 
     if tag == "securefield" {
@@ -915,14 +995,14 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
             .unwrap_or_default();
         let field_get = field_accessor(&bind, cx)?;
         let ph = format!("\"{}\"", escape_swift_string(&placeholder));
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}SecureField({}, text: Binding(get: {{ {} }}, set: {{ eventSink(\"bind:{}:\\($0)\") }}))\n{}.textFieldStyle(.roundedBorder)",
             indent(ind),
             ph,
             field_get,
             bind,
             indent(ind)
-        ));
+        )));
     }
 
     if tag == "picker" {
@@ -944,163 +1024,129 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
                 escape_swift_string(&o.0),
             ));
         }
-        return Ok(format!(
+        return Ok(Some(format!(
             "{}Picker(\"\", selection: Binding(get: {{ {} }}, set: {{ eventSink(\"bind:{}:\\($0)\") }})) {{\n{}}}\n{}.pickerStyle(.segmented)\n            .padding(.bottom, 4)",
             indent(ind),
             sel,
             bind,
             body,
             indent(ind)
-        ));
+        )));
     }
 
-    if tag == "list" {
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        let list_extras = swiftgen_style::list_extras(&el.classes);
-        return Ok(format!(
-            "{}List {{\n{}\n{}}}{}{}",
-            indent(ind),
-            children,
-            indent(ind),
-            list_extras,
-            mods
-        ));
-    }
+    Ok(None)
+}
 
-    if tag == "sidebar" {
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
-            "{}List {{\n{}\n{}}}\n{}{}.listStyle(.sidebar)",
-            indent(ind),
-            children,
-            indent(ind),
-            indent(ind),
-            mods
-        ));
-    }
-
-    if tag == "item" {
-        let click = el
-            .event_handlers
-            .iter()
-            .find(|h| h.event == "click")
-            .map(|h| h.handler.trim_matches('"').to_string())
+fn emit_content_element(
+    tag: &str,
+    el: &Element,
+    cx: &GenCtx,
+    ind: usize,
+) -> anyhow::Result<Option<String>> {
+    if tag == "label" {
+        let title = binding_value(el, "title")
+            .or_else(|| {
+                collect_inline_text(&el.children, cx)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })
             .unwrap_or_default();
-        let row_body = emit_nodes_block(&el.children, cx, ind + 8)?;
-        let layout = swiftgen_style::container_modifiers(&el.classes, false);
-        if click.is_empty() {
-            return Ok(format!(
-                "{}HStack(alignment: .top, spacing: 8) {{\n{}\n{}}}{}",
+        let symbol = binding_value(el, "symbol")
+            .or_else(|| binding_value(el, "icon"))
+            .unwrap_or_else(|| "circle".to_string());
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        return Ok(Some(format!(
+            "{}Label(\"{}\", systemImage: \"{}\"){}",
+            indent(ind),
+            escape_swift_string(&title),
+            escape_swift_string(&symbol),
+            mods
+        )));
+    }
+
+    if tag == "image" {
+        let system = binding_value(el, "system")
+            .or_else(|| binding_value(el, "symbol"))
+            .or_else(|| {
+                binding_value(el, "name").and_then(|v| {
+                    if v.starts_with("sf-") {
+                        Some(v.trim_start_matches("sf-").replace('-', "."))
+                    } else {
+                        None
+                    }
+                })
+            });
+        let mods = swiftgen_style::container_modifiers(&el.classes, false);
+        if let Some(sym) = system {
+            return Ok(Some(format!(
+                "{}Image(systemName: \"{}\"){}",
                 indent(ind),
-                row_body,
-                indent(ind),
-                layout
-            ));
+                escape_swift_string(&sym),
+                mods
+            )));
         }
-        let event_expr = event_handler_expr(&click, cx)?;
-        return Ok(format!(
-            "{}Button {{\n{}eventSink({})\n{}}} label: {{\n{}\n{}}}\n{}.buttonStyle(.plain){}",
+        let asset = binding_value(el, "name").unwrap_or_else(|| "photo".to_string());
+        return Ok(Some(format!(
+            "{}Image(\"{}\"){}",
             indent(ind),
-            indent(ind + 4),
-            event_expr,
-            indent(ind),
-            row_body,
-            indent(ind),
-            indent(ind),
-            layout
-        ));
+            escape_swift_string(&asset),
+            mods
+        )));
+    }
+
+    if tag == "span" || tag == "p" {
+        let parts = first_text_parts(&el.children).ok_or_else(|| {
+            anyhow!(
+                "<{}> must contain text (swiftgen span/p limitation)",
+                el.tag
+            )
+        })?;
+        let inner = emit_text(parts, cx, 0)?;
+        let trimmed = inner.trim_start();
+        let mods = swiftgen_style::text_modifiers(&el.classes);
+        return Ok(Some(format!("{}{}{}", indent(ind), trimmed, mods)));
     }
 
     if tag == "spacer" {
-        return Ok(format!("{}Spacer()", indent(ind)));
+        return Ok(Some(format!("{}Spacer()", indent(ind))));
     }
 
     if tag == "divider" {
-        return Ok(format!("{}Divider()", indent(ind)));
+        return Ok(Some(format!("{}Divider()", indent(ind))));
     }
 
-    if tag == "form" {
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
-            "{}Form {{\n{}\n{}}}{}",
-            indent(ind),
-            children,
-            indent(ind),
-            mods
-        ));
-    }
+    Ok(None)
+}
+fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String> {
+    let tag = el.tag.to_ascii_lowercase();
 
-    if tag == "group" {
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        return Ok(format!(
-            "{}Group {{\n{}\n{}}}{}",
-            indent(ind),
-            children,
-            indent(ind),
-            mods
-        ));
-    }
+    // Semantic component layer for native SwiftUI tags. These coexist with utility-first
+    // layout (`div flex`, `div flex-col`, gaps, padding, etc.), so templates can mix
+    // declarative SwiftUI structure and Tailwind-style class composition in one engine.
+    //
+    // Supported semantic tags include:
+    // - Containers: navigationstack, navigationsplitview, sidebar, detail/content,
+    //   form, section, group, list, item, vstack/hstack/zstack, scrollview/scroll
+    // - Controls: button, toggle, picker, textfield/input, securefield, menu
+    // - Content: span/p, label, image, sf/sf-*, divider, spacer
+    // - Control flow is still handled by the AST nodes (if/for/match), unchanged.
 
-    if tag == "section" {
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let header = el
-            .bindings
-            .iter()
-            .find(|b| b.prop == "header")
-            .map(|b| {
-                b.value
-                    .trim()
-                    .trim_matches(|c| c == '"' || c == '\'')
-                    .to_string()
-            })
-            .filter(|s| !s.is_empty());
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        if let Some(header_text) = header {
-            return Ok(format!(
-                "{}Section {{\n{}\n{}}} header: {{\n{}Text(\"{}\")\n{}}}{}",
-                indent(ind),
-                children,
-                indent(ind),
-                indent(ind + 4),
-                escape_swift_string(&header_text),
-                indent(ind),
-                mods
-            ));
-        }
-        return Ok(format!(
-            "{}Section {{\n{}\n{}}}{}",
-            indent(ind),
-            children,
-            indent(ind),
-            mods
-        ));
+    if let Some(res) = emit_custom_element(&tag, el, cx, ind)? {
+        return Ok(res);
     }
-
-    if tag == "vstack" || tag == "hstack" || tag == "zstack" {
-        let spacing = gap_points(&el.classes)
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "0".to_string());
-        let children = emit_nodes_block(&el.children, cx, ind + 4)?;
-        let mods = swiftgen_style::container_modifiers(&el.classes, false);
-        let ctor = match tag.as_str() {
-            "vstack" => format!("VStack(alignment: .leading, spacing: {spacing})"),
-            "hstack" => format!("HStack(alignment: .top, spacing: {spacing})"),
-            _ => "ZStack(alignment: .topLeading)".to_string(),
-        };
-        return Ok(format!(
-            "{}{} {{\n{}\n{}}}{}",
-            indent(ind),
-            ctor,
-            children,
-            indent(ind),
-            mods
-        ));
+    if let Some(res) = emit_container_element(&tag, el, cx, ind)? {
+        return Ok(res);
     }
-
+    if let Some(res) = emit_control_element(&tag, el, cx, ind)? {
+        return Ok(res);
+    }
+    if let Some(res) = emit_content_element(&tag, el, cx, ind)? {
+        return Ok(res);
+    }
+    if tag == "sf" || tag.starts_with("sf-") {
+        return emit_sf_symbol(el, cx, ind);
+    }
     let axis = if el.classes.iter().any(|c| c == "flex-col") {
         "VStack"
     } else {
@@ -1155,7 +1201,6 @@ fn emit_element(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String>
         Ok(format!("{}{}{}", indent(ind), stack_inner, mods))
     }
 }
-
 fn emit_sf_symbol(el: &Element, cx: &GenCtx, ind: usize) -> anyhow::Result<String> {
     let from_binding = el
         .bindings
