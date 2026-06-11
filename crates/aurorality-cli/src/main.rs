@@ -161,6 +161,24 @@ pub fn find_workspace_root() -> PathBuf {
 }
 
 pub fn pre_build() -> Result<()> {
+    if let Some(commands) = configured_pre_build_commands()? {
+        for command in commands {
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg(&command)
+                .status()
+                .map_err(|e| anyhow::anyhow!("pre-build command `{command}`: {e}"))?;
+            if !status.success() {
+                anyhow::bail!(
+                    "pre-build command `{}` failed ({})",
+                    command,
+                    status.code().unwrap_or(1)
+                );
+            }
+        }
+        return Ok(());
+    }
+
     let ws = find_workspace_root();
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
 
@@ -203,6 +221,36 @@ pub fn pre_build() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn configured_pre_build_commands() -> Result<Option<Vec<String>>> {
+    for file in ["crepus.toml", ".brisk.toml"] {
+        let path = PathBuf::from(file);
+        if path.is_file() {
+            let commands = read_pre_build_commands(&path)?;
+            if !commands.is_empty() {
+                return Ok(Some(commands));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn read_pre_build_commands(path: &Path) -> Result<Vec<String>> {
+    let raw = std::fs::read_to_string(path)?;
+    let value: toml::Value = toml::from_str(&raw)?;
+    let Some(commands) = value
+        .get("pre_build")
+        .and_then(|pre_build| pre_build.get("commands"))
+        .and_then(|commands| commands.as_array())
+    else {
+        return Ok(Vec::new());
+    };
+
+    Ok(commands
+        .iter()
+        .filter_map(|command| command.as_str().map(ToString::to_string))
+        .collect())
 }
 
 pub fn find_swift() -> String {

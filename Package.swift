@@ -35,6 +35,7 @@ let package = Package(
                 "crates",
                 "examples",
                 "runner",
+                "scripts",
                 "swift/Tests",
                 "target",
                 ".brisk.toml",
