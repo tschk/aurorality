@@ -12,6 +12,7 @@ use anyhow::Result;
 pub struct ProjectConfig {
     pub name: String,
     pub bundle_id: String,
+    pub sources: Option<String>,
     pub resources: Vec<String>,
 }
 
@@ -32,6 +33,7 @@ fn try_read_toml(path: &Path) -> Result<ProjectConfig> {
     let content = std::fs::read_to_string(path)?;
     let mut name = String::new();
     let mut bundle_id = String::new();
+    let mut sources = None;
     let mut resources: Vec<String> = vec![];
 
     let mut section = "";
@@ -47,6 +49,7 @@ fn try_read_toml(path: &Path) -> Result<ProjectConfig> {
             match (section, k) {
                 ("[package]", "name") => name = v.to_string(),
                 ("[app]", "bundle_id") => bundle_id = v.to_string(),
+                ("[app]", "sources") => sources = Some(v.to_string()),
                 _ => {}
             }
         }
@@ -72,6 +75,7 @@ fn try_read_toml(path: &Path) -> Result<ProjectConfig> {
     Ok(ProjectConfig {
         name,
         bundle_id,
+        sources,
         resources,
     })
 }
@@ -104,6 +108,7 @@ fn infer_from_package(project_root: &Path) -> Result<ProjectConfig> {
     Ok(ProjectConfig {
         bundle_id: format!("dev.aurorality.{}", name.to_lowercase()),
         resources: vec![],
+        sources: None,
         name,
     })
 }
@@ -188,10 +193,9 @@ pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
         &cfg.resources,
     )?;
 
-    Command::new("open")
-        .arg(&app_dir)
+    Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name))
         .spawn()
-        .map_err(|e| anyhow::anyhow!("open: {e}"))
+        .map_err(|e| anyhow::anyhow!("launch {}: {e}", cfg.name))
 }
 
 /// Build project, wrap in .app bundle, launch with `open`.
