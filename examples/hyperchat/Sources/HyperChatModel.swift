@@ -9,6 +9,9 @@ import Observation
 #if canImport(UserNotifications)
 import UserNotifications
 #endif
+#if canImport(Security)
+import Security
+#endif
 
 /// Orchestrates HyperChat state, transport health, and `.crepus` → `eventSink` actions.
 @Observable
@@ -39,6 +42,7 @@ public final class HyperChatModel {
     @ObservationIgnored private let bridge: AurorBridge
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let keyPrefix = "hyperchat.transport."
+    @ObservationIgnored private var secretCache: [String: String] = [:]
     @ObservationIgnored private var pollTimer: Timer?
     @ObservationIgnored private var typingTimer: Timer?
     @ObservationIgnored private var seenMatrixEvents = Set<String>()
@@ -260,32 +264,107 @@ public final class HyperChatModel {
 
     // MARK: - Transport config (stored + exported to process env)
 
+    /// Non-secret transport fields stay in `UserDefaults`; only credentials use Keychain.
+    private func savePlainString(_ value: String, forKey key: String) {
+        defaults.set(value, forKey: key)
+    }
+
+    private func loadPlainString(forKey key: String, default defaultValue: String = "") -> String {
+        defaults.string(forKey: key) ?? defaultValue
+    }
+
+    #if canImport(Security)
+        private func keychainQuery(account key: String, includeAccessible: Bool = false) -> [String: Any] {
+            var query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: bundleId,
+                kSecAttrAccount as String: key,
+            ]
+            if includeAccessible {
+                query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            }
+            return query
+        }
+    #endif
+
+    @discardableResult
+    private func saveSecureString(_ value: String, forKey key: String) -> Bool {
+        #if canImport(Security)
+        guard let data = value.data(using: .utf8) else { return false }
+
+        let deleteQuery = keychainQuery(account: key)
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        var addQuery = keychainQuery(account: key, includeAccessible: true)
+        addQuery[kSecValueData as String] = data
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else { return false }
+
+        secretCache[key] = value
+        return true
+        #else
+        defaults.set(value, forKey: key)
+        return true
+        #endif
+    }
+
+    private func loadSecureString(forKey key: String) -> String? {
+        if let cached = secretCache[key] { return cached }
+
+        #if canImport(Security)
+        var query = keychainQuery(account: key)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var dataTypeRef: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
+        if status == errSecSuccess,
+            let data = dataTypeRef as? Data,
+            let value = String(data: data, encoding: .utf8)
+        {
+            secretCache[key] = value
+            return value
+        }
+
+        if let legacyValue = defaults.string(forKey: key) {
+            if saveSecureString(legacyValue, forKey: key) {
+                defaults.removeObject(forKey: key)
+            }
+            return legacyValue
+        }
+
+        return nil
+        #else
+        return defaults.string(forKey: key)
+        #endif
+    }
+
     public var matrixHomeserver: String {
-        defaults.string(forKey: keyPrefix + "matrix.homeserver") ?? ""
+        loadPlainString(forKey: keyPrefix + "matrix.homeserver")
     }
 
     public var matrixUserId: String {
-        defaults.string(forKey: keyPrefix + "matrix.userId") ?? ""
+        loadPlainString(forKey: keyPrefix + "matrix.userId")
     }
 
     public var matrixAccessToken: String {
-        defaults.string(forKey: keyPrefix + "matrix.accessToken") ?? ""
+        loadSecureString(forKey: keyPrefix + "matrix.accessToken") ?? ""
     }
 
     public var matrixRoomId: String {
-        defaults.string(forKey: keyPrefix + "matrix.roomId") ?? ""
+        loadPlainString(forKey: keyPrefix + "matrix.roomId")
     }
 
     public var stalwartBaseUrl: String {
-        defaults.string(forKey: keyPrefix + "stalwart.baseUrl") ?? "http://localhost:8080"
+        loadPlainString(forKey: keyPrefix + "stalwart.baseUrl", default: "http://localhost:8080")
     }
 
     public var stalwartUsername: String {
-        defaults.string(forKey: keyPrefix + "stalwart.username") ?? ""
+        loadPlainString(forKey: keyPrefix + "stalwart.username")
     }
 
     public var stalwartPassword: String {
-        defaults.string(forKey: keyPrefix + "stalwart.password") ?? ""
+        loadSecureString(forKey: keyPrefix + "stalwart.password") ?? ""
     }
 
     public func saveTransportConfig(
@@ -297,13 +376,13 @@ public final class HyperChatModel {
         stalwartUsername: String,
         stalwartPassword: String
     ) {
-        defaults.set(matrixHomeserver, forKey: keyPrefix + "matrix.homeserver")
-        defaults.set(matrixUserId, forKey: keyPrefix + "matrix.userId")
-        defaults.set(matrixAccessToken, forKey: keyPrefix + "matrix.accessToken")
-        defaults.set(matrixRoomId, forKey: keyPrefix + "matrix.roomId")
-        defaults.set(stalwartBaseUrl, forKey: keyPrefix + "stalwart.baseUrl")
-        defaults.set(stalwartUsername, forKey: keyPrefix + "stalwart.username")
-        defaults.set(stalwartPassword, forKey: keyPrefix + "stalwart.password")
+        savePlainString(matrixHomeserver, forKey: keyPrefix + "matrix.homeserver")
+        savePlainString(matrixUserId, forKey: keyPrefix + "matrix.userId")
+        saveSecureString(matrixAccessToken, forKey: keyPrefix + "matrix.accessToken")
+        savePlainString(matrixRoomId, forKey: keyPrefix + "matrix.roomId")
+        savePlainString(stalwartBaseUrl, forKey: keyPrefix + "stalwart.baseUrl")
+        savePlainString(stalwartUsername, forKey: keyPrefix + "stalwart.username")
+        saveSecureString(stalwartPassword, forKey: keyPrefix + "stalwart.password")
         applyStoredTransportConfig()
         reloadTransports()
         refreshTransportHealth()
