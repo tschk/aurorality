@@ -2,7 +2,7 @@
 name = "hyperchat-backend"
 version = "0.1.0"
 edition = "2021"
-license = "MPL-2.0"
+license = "ISC"
 description = "HyperChat transport FFI — Matrix, Stalwart, Bitchat status (eqswift + UniFFI)"
 publish = false
 

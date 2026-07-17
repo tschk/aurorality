@@ -11,7 +11,7 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 authors = ["Max Carter <max@undivisible.dev>"]
-license = "MPL-2.0"
+license = "ISC"
 rust-version = "1.88"
 
 [workspace.dependencies]

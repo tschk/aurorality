@@ -184,4 +184,4 @@ Swift hosts use **`HotReloadClient`** → **`HotReloadBus`** and optional **`Aur
 
 ## License
 
-MPL-2.0
+ISC
