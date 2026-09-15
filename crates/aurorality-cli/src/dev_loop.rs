@@ -3,7 +3,7 @@
 //! Watches `views/` and `Sources/`. On change: swift build, kill old app,
 //! launch new app. No WebSocket, no ports — same pattern as `crepus dev`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -112,7 +112,7 @@ pub fn run(watch_views: PathBuf) {
     stop_running_app(&cwd, &child, false);
 }
 
-fn build_and_launch_app(project_root: &PathBuf) -> Option<Child> {
+fn build_and_launch_app(project_root: &Path) -> Option<Child> {
     let swift = crate::find_swift();
     let t0 = Instant::now();
 
@@ -150,7 +150,7 @@ fn build_and_launch_app(project_root: &PathBuf) -> Option<Child> {
     }
 }
 
-fn stop_running_app(project_root: &PathBuf, child: &Arc<Mutex<Option<Child>>>, restarting: bool) {
+fn stop_running_app(project_root: &Path, child: &Arc<Mutex<Option<Child>>>, restarting: bool) {
     if let Ok(mut old) = child.lock() {
         if let Some(mut c) = old.take() {
             if restarting {
@@ -166,7 +166,7 @@ fn stop_running_app(project_root: &PathBuf, child: &Arc<Mutex<Option<Child>>>, r
     }
 }
 
-fn watched_source_dirs(cwd: &PathBuf, cfg: Option<&build_swift::ProjectConfig>) -> Vec<PathBuf> {
+fn watched_source_dirs(cwd: &Path, cfg: Option<&build_swift::ProjectConfig>) -> Vec<PathBuf> {
     let configured = cfg
         .and_then(|cfg| cfg.sources.as_ref())
         .map(|path| cwd.join(path));
@@ -184,13 +184,13 @@ fn watched_source_dirs(cwd: &PathBuf, cfg: Option<&build_swift::ProjectConfig>) 
 }
 
 fn watched_resource_dirs(
-    cwd: &PathBuf,
-    watch_views: &PathBuf,
+    cwd: &Path,
+    watch_views: &Path,
     cfg: Option<&build_swift::ProjectConfig>,
 ) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if watch_views.exists() {
-        dirs.push(watch_views.clone());
+        dirs.push(watch_views.to_path_buf());
     }
     if let Some(cfg) = cfg {
         for resource in &cfg.resources {
