@@ -163,4 +163,33 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["ok"], false);
     }
+
+    #[test]
+    fn matrix_list_uses_single_envelope() {
+        let result = plugin_invoke("matrix".into(), "list".into(), "{}".into()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        assert!(v["data"].is_array(), "expected a message array, got {v}");
+        assert!(v["data"].get("ok").is_none());
+    }
+
+    #[test]
+    fn matrix_send_empty_uses_single_envelope() {
+        let result = plugin_invoke("matrix".into(), "send".into(), "{}".into()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["data"]["accepted"], false);
+        assert_eq!(v["data"]["reason"], "empty");
+        assert!(v["data"].get("data").is_none());
+    }
+
+    #[test]
+    fn stalwart_send_empty_uses_single_envelope() {
+        let result = plugin_invoke("stalwart".into(), "send".into(), "{}".into()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["data"]["accepted"], false);
+        assert_eq!(v["data"]["reason"], "empty");
+        assert!(v["data"].get("data").is_none());
+    }
 }

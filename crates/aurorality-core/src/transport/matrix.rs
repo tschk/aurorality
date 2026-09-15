@@ -11,9 +11,7 @@
 //! - `MATRIX_ROOM_ID` — target room ID (e.g. `!abc123:matrix.org`)
 
 use crate::bridge::NativePlugin;
-use crate::transport::{
-    envelope_err, envelope_ok, TransportHealth, TransportInfo, TransportMessage,
-};
+use crate::transport::{TransportHealth, TransportInfo, TransportMessage};
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -226,30 +224,23 @@ impl NativePlugin for MatrixClient {
             }
             "list" => {
                 if !self.configured() {
-                    return Ok(envelope_ok(serde_json::json!([])));
+                    return Ok(serde_json::json!([]));
                 }
-                match self.sync_messages() {
-                    Ok(msgs) => Ok(envelope_ok(serde_json::to_value(&msgs).unwrap_or_default())),
-                    Err(e) => Ok(envelope_err(&e)),
-                }
+                self.sync_messages()
+                    .map(|msgs| serde_json::to_value(&msgs).unwrap_or_default())
             }
             "send" => {
                 let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 if text.is_empty() {
-                    return Ok(envelope_ok(
-                        serde_json::json!({"accepted": false, "reason": "empty"}),
-                    ));
+                    return Ok(serde_json::json!({"accepted": false, "reason": "empty"}));
                 }
                 if !self.configured() {
-                    return Ok(envelope_ok(serde_json::json!({
+                    return Ok(serde_json::json!({
                         "accepted": false,
                         "reason": "matrix not configured"
-                    })));
+                    }));
                 }
-                match self.send_message(text) {
-                    Ok(resp) => Ok(envelope_ok(resp)),
-                    Err(e) => Ok(envelope_err(&e)),
-                }
+                self.send_message(text)
             }
             _ => Err(format!("unknown matrix method: {method}")),
         }

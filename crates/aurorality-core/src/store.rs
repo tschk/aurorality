@@ -57,7 +57,7 @@ pub fn store_path(bundle_id: String) -> String {
 
 /// Read one JSON value by key; returns `None` when missing.
 pub fn store_get(bundle_id: String, key: String) -> Result<Option<String>, AurorError> {
-    let _g = STORE_LOCK.lock().unwrap();
+    let _g = STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = application_support_file(bundle_id.trim());
     let map = load_map(&path)?;
     Ok(map.get(&key).map(|v| v.to_string()))
@@ -65,7 +65,7 @@ pub fn store_get(bundle_id: String, key: String) -> Result<Option<String>, Auror
 
 /// Upsert a JSON value (must parse as [`serde_json::Value`]).
 pub fn store_set(bundle_id: String, key: String, json: String) -> Result<(), AurorError> {
-    let _g = STORE_LOCK.lock().unwrap();
+    let _g = STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = application_support_file(bundle_id.trim());
     let mut map = load_map(&path)?;
     let parsed: serde_json::Value =
