@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "aurorality-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "aurorality-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crepuscularity-core",
  "crepuscularity-native",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "aurorality-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",

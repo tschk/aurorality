@@ -1,6 +1,6 @@
 [package]
 name = "aurorality"
-version = "0.1.0"
+version = "0.1.1"
 
 # Root-level build: builds the Rust core and generates Swift bindings.
 # Use this as a reference; individual apps have their own .brisk.toml.

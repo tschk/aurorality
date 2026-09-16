@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
 description = "Proc-macros for aurorality (#[aurorality::plugin])"
 
 [lib]

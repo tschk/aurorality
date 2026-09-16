@@ -8,11 +8,12 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Max Carter <max@undivisible.dev>"]
 license = "ISC"
 rust-version = "1.88"
+repository = "https://github.com/tschk/aurorality"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.1.0)"
+        description: "Tag to release (e.g. v0.1.1)"
         required: true
 
 jobs:
@@ -16,6 +16,8 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest]
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,13 +38,13 @@ jobs:
           mkdir -p dist
           cp target/release/aurorality dist/
           cp target/release/libaurorality_core.dylib dist/
-          cd dist && tar czf ../aurorality-${{ github.ref_name }}-macos.tar.gz .
+          cd dist && tar czf ../aurorality-${RELEASE_TAG}-macos.tar.gz .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: aurorality-${{ github.ref_name }}-macos
-          path: aurorality-${{ github.ref_name }}-macos.tar.gz
+          name: aurorality-${{ env.RELEASE_TAG }}-macos
+          path: aurorality-${{ env.RELEASE_TAG }}-macos.tar.gz
 
   release:
     name: Create Release
@@ -50,15 +52,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: aurorality-${{ github.ref_name }}-macos
+          name: aurorality-${{ env.RELEASE_TAG }}-macos
           path: .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
-          files: aurorality-${{ github.ref_name }}-macos.tar.gz
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          files: aurorality-${{ env.RELEASE_TAG }}-macos.tar.gz
           generate_release_notes: true
