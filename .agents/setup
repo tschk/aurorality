@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Idempotent orb setup for Aurorality (Rust workspace + Swift sources).
+set -euo pipefail
+
+log() { printf '[setup] %s\n' "$*"; }
+time_step() {
+  local label="$1"
+  shift
+  local start
+  start="$(date +%s)"
+  log "start: ${label}"
+  "$@"
+  log "done: ${label} ($(( $(date +%s) - start ))s)"
+}
+
+need_pkg() {
+  dpkg -s "$1" >/dev/null 2>&1
+}
+
+ensure_apt_packages() {
+  local pkgs=()
+  local pkg
+  for pkg in build-essential pkg-config libssl-dev ca-certificates curl; do
+    if ! need_pkg "$pkg"; then
+      pkgs+=("$pkg")
+    fi
+  done
+  if ((${#pkgs[@]} == 0)); then
+    log "apt packages already present"
+    return
+  fi
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${pkgs[@]}"
+}
+
+ensure_rustup() {
+  export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+  export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+  # shellcheck disable=SC1091
+  if [[ -f "$CARGO_HOME/env" ]]; then
+    source "$CARGO_HOME/env"
+  fi
+  if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1 \
+    && command -v rustfmt >/dev/null 2>&1 && command -v cargo-clippy >/dev/null 2>&1; then
+    log "rust toolchain already present"
+    return
+  fi
+  if ! command -v rustup >/dev/null 2>&1; then
+    log "installing rustup (stable, minimal)"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+    # shellcheck disable=SC1091
+    source "$CARGO_HOME/env"
+  fi
+  rustup toolchain install stable --profile minimal --component rustfmt,clippy >/dev/null
+  rustup default stable >/dev/null
+}
+
+ensure_login_path() {
+  local marker="# aurorality rustup"
+  if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >> "$HOME/.bash_profile" <<'EOF'
+
+# aurorality rustup
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.cargo/env"
+fi
+EOF
+  fi
+  if ! grep -Fqx "$marker" "$HOME/.bashrc" 2>/dev/null; then
+    cat >> "$HOME/.bashrc" <<'EOF'
+
+# aurorality rustup
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.cargo/env"
+fi
+EOF
+  fi
+}
+
+fetch_workspace() {
+  export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+  export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+  # shellcheck disable=SC1091
+  source "$CARGO_HOME/env"
+  cargo fetch --locked
+}
+
+time_step "apt packages" ensure_apt_packages
+time_step "rust toolchain" ensure_rustup
+time_step "login PATH" ensure_login_path
+time_step "cargo fetch --locked" fetch_workspace
+
+log "rustc=$(rustc --version)"
+log "cargo=$(cargo --version)"
+log "complete"
