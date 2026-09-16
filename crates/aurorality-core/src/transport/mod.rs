@@ -58,12 +58,3 @@ impl TransportHealth {
         }
     }
 }
-
-/// Helper: build a JSON envelope the plugin bridge expects.
-pub fn envelope_ok(data: serde_json::Value) -> serde_json::Value {
-    serde_json::json!({ "ok": true, "data": data })
-}
-
-pub fn envelope_err(msg: &str) -> serde_json::Value {
-    serde_json::json!({ "ok": false, "error": msg })
-}

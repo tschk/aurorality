@@ -87,29 +87,23 @@ fn int_path_field(m: &Value, field: &str) -> Result<Vec<usize>, String> {
 
 // ── Tree operations ───────────────────────────────────────────────────────────
 
-// NOTE: The raw pointer casts below (`as *mut Vec<Value>`) are needed to work
-// around the borrow checker when recursing through `serde_json::Value`. They
-// are safe because we only ever follow a single path through the tree at a time
-// and never create aliasing mutable references.
+fn children_mut(node: &mut Value) -> Option<&mut Vec<Value>> {
+    node.get_mut("children")?.as_array_mut()
+}
 
-#[allow(clippy::ptr_arg)]
-fn replace_at(nodes: &mut Vec<Value>, path: &[usize], replacement: Value) {
-    let Some(&first) = path.first() else { return };
+fn replace_at(nodes: &mut [Value], path: &[usize], replacement: Value) {
+    let Some((&first, rest)) = path.split_first() else {
+        return;
+    };
     if first >= nodes.len() {
         return;
     }
-    if path.len() == 1 {
+    if rest.is_empty() {
         nodes[first] = replacement;
-    } else {
-        let children = nodes[first]["children"]
-            .as_array_mut()
-            .map(|c| c as *mut Vec<Value>);
-        if let Some(children) = children {
-            // SAFETY: The raw pointer derives from an `&mut Vec<Value>` obtained
-            // via `as_array_mut()`. We follow a single path through the tree,
-            // never creating aliasing mutable references to the same Vec.
-            replace_at(unsafe { &mut *children }, &path[1..], replacement);
-        }
+        return;
+    }
+    if let Some(children) = children_mut(&mut nodes[first]) {
+        replace_at(children, rest, replacement);
     }
 }
 
@@ -119,56 +113,46 @@ fn insert_at(nodes: &mut Vec<Value>, parent_path: &[usize], idx: usize, node: Va
         nodes.insert(safe_idx, node);
         return;
     }
-    let Some(&first) = parent_path.first() else {
+    let Some((&first, rest)) = parent_path.split_first() else {
         return;
     };
     if first >= nodes.len() {
         return;
     }
-    let children = nodes[first]["children"]
-        .as_array_mut()
-        .map(|c| c as *mut Vec<Value>);
-    if let Some(children) = children {
-        // SAFETY: Same pattern as replace_at — single path through the tree,
-        // no aliasing mutable references.
-        insert_at(unsafe { &mut *children }, &parent_path[1..], idx, node);
+    if let Some(children) = children_mut(&mut nodes[first]) {
+        insert_at(children, rest, idx, node);
     }
 }
 
 fn remove_at(nodes: &mut Vec<Value>, path: &[usize]) {
-    let Some(&first) = path.first() else { return };
+    let Some((&first, rest)) = path.split_first() else {
+        return;
+    };
     if first >= nodes.len() {
         return;
     }
-    if path.len() == 1 {
+    if rest.is_empty() {
         nodes.remove(first);
         return;
     }
-    let children = nodes[first]["children"]
-        .as_array_mut()
-        .map(|c| c as *mut Vec<Value>);
-    if let Some(children) = children {
-        // SAFETY: Same pattern — single path, no aliasing mutable references.
-        remove_at(unsafe { &mut *children }, &path[1..]);
+    if let Some(children) = children_mut(&mut nodes[first]) {
+        remove_at(children, rest);
     }
 }
 
-#[allow(clippy::ptr_arg)]
-fn update_field_at(nodes: &mut Vec<Value>, path: &[usize], field: &str, value: Value) {
-    let Some(&first) = path.first() else { return };
+fn update_field_at(nodes: &mut [Value], path: &[usize], field: &str, value: Value) {
+    let Some((&first, rest)) = path.split_first() else {
+        return;
+    };
     if first >= nodes.len() {
         return;
     }
-    if path.len() == 1 {
+    if rest.is_empty() {
         nodes[first][field] = value;
         return;
     }
-    let children = nodes[first]["children"]
-        .as_array_mut()
-        .map(|c| c as *mut Vec<Value>);
-    if let Some(children) = children {
-        // SAFETY: Same pattern — single path, no aliasing mutable references.
-        update_field_at(unsafe { &mut *children }, &path[1..], field, value);
+    if let Some(children) = children_mut(&mut nodes[first]) {
+        update_field_at(children, rest, field, value);
     }
 }
 
@@ -220,5 +204,35 @@ mod tests {
         let result = apply(simple_ir(), muts).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["root"][0]["content"], "hello");
+    }
+
+    fn nested_ir() -> &'static str {
+        r#"{"version":3,"root":[{"kind":"stack","children":[{"kind":"text","content":"inner"}]}]}"#
+    }
+
+    #[test]
+    fn nested_replace_update_insert_remove() {
+        let muts = r#"[{"op":"updateText","path":[0,0],"content":"updated"}]"#;
+        let result = apply(nested_ir(), muts).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["root"][0]["children"][0]["content"], "updated");
+
+        let muts =
+            r#"[{"op":"replaceNode","path":[0,0],"node":{"kind":"text","content":"replaced"}}]"#;
+        let result = apply(&result, muts).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["root"][0]["children"][0]["content"], "replaced");
+
+        let muts = r#"[{"op":"insertNode","parentPath":[0],"index":1,"node":{"kind":"text","content":"second"}}]"#;
+        let result = apply(&result, muts).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["root"][0]["children"].as_array().unwrap().len(), 2);
+        assert_eq!(v["root"][0]["children"][1]["content"], "second");
+
+        let muts = r#"[{"op":"removeNode","path":[0,0]}]"#;
+        let result = apply(&result, muts).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["root"][0]["children"].as_array().unwrap().len(), 1);
+        assert_eq!(v["root"][0]["children"][0]["content"], "second");
     }
 }

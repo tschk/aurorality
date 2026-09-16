@@ -57,11 +57,13 @@ mod stalwart_integration {
             .expect("STALWART_USERNAME and STALWART_PASSWORD must be set for integration tests");
 
         let result = client.invoke("list", &serde_json::json!({})).unwrap();
-        let envelope: Value = serde_json::from_value(result).unwrap();
+        let messages: Value = serde_json::from_value(result).unwrap();
 
-        // Should be a valid JSON-RPC-style response
-        assert_eq!(envelope["ok"], true, "list should succeed: {envelope:?}");
-        assert!(envelope["data"].is_array(), "data should be an array");
+        // NativePlugin::invoke returns the payload; plugin_invoke wraps `{ ok, data }`.
+        assert!(
+            messages.is_array(),
+            "list should return a message array: {messages:?}"
+        );
     }
 
     #[test]
