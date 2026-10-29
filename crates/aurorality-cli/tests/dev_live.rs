@@ -50,7 +50,7 @@ fn run(announce: bool) -> Vec<String> {
         ":"
     };
     let app = format!(
-        "#!/bin/sh\\necho \"views=$AURORALITY_VIEWS_DIR port=${{AURORALITY_DEV_PORT:-none}}\" >> \"$DEV_LIVE_LOG\"\\n{marker_cmd}\\nexec sleep 30\\n"
+        "#!/bin/sh\\necho \"views=$AURORALITY_VIEWS_DIR port=${{AURORALITY_DEV_PORT:-none}} overlay=${{AURORALITY_DEV:-off}}\" >> \"$DEV_LIVE_LOG\"\\n{marker_cmd}\\nexec sleep 30\\n"
     );
     let swift = format!(
         "#!/bin/sh\nmkdir -p .build/debug/LiveFixture_LiveFixture.bundle\n: > .build/debug/LiveFixture_LiveFixture.bundle/main.crepus\nprintf '{app}' > .build/debug/LiveFixture\nchmod +x .build/debug/LiveFixture\nexit 0\n"
@@ -104,7 +104,11 @@ fn run(announce: bool) -> Vec<String> {
 fn watching_app_is_not_relaunched_on_template_save_and_no_port_is_used() {
     let launches = run(true);
     assert_eq!(launches.len(), 1, "{launches:?}");
-    assert!(launches[0].ends_with("/views port=none"), "{launches:?}");
+    // No server, so the dev overlay (which would connect to one) stays off.
+    assert!(
+        launches[0].ends_with("/views port=none overlay=off"),
+        "{launches:?}"
+    );
     assert!(
         launches[0].starts_with("views=/"),
         "views dir must be absolute: {launches:?}"

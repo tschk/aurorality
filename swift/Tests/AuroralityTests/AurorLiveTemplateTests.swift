@@ -50,6 +50,13 @@ final class AurorLiveTemplateTests: XCTestCase {
         try await waitFor { state.error != nil }
         try "span text-base\n  \"Fixed {title}\"\n".write(to: file, atomically: true, encoding: .utf8)
         try await waitFor { self.text(state) == "Fixed New" && state.error == nil }
+
+        // Deleted, then restored well after the rename window (a branch switch):
+        // the restored contents are loaded without another save.
+        try FileManager.default.removeItem(at: file)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        try "span text-base\n  \"Restored {title}\"\n".write(to: file, atomically: false, encoding: .utf8)
+        try await waitFor { self.text(state) == "Restored New" }
     }
 
     func testWithoutDevEnvironmentTheBundleIsUsedAndNothingIsWatched() throws {

@@ -72,16 +72,21 @@ public final class AurorTemplateWatcher {
     public init(url: URL, onChange: @escaping () -> Void) {
         self.url = url
         self.onChange = onChange
-        arm()
+        arm(reload: false)
     }
 
     deinit { source?.cancel() }
 
-    private func arm() {
+    /// Watch the file at `url`; with `reload`, call `onChange` once it is attached
+    /// (the file was replaced or deleted, so its contents may be new).
+    private func arm(reload: Bool) {
         let fd = open(url.path, O_EVTONLY)
         guard fd >= 0 else {
-            // Mid-save (file briefly absent): try again shortly.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.arm() }
+            // File absent (mid-save, or deleted by a branch switch): retry until it
+            // is back, then reload. Stops when the watcher is released.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.arm(reload: true)
+            }
             return
         }
         let src = DispatchSource.makeFileSystemObjectSource(
@@ -94,8 +99,7 @@ public final class AurorTemplateWatcher {
                 self.source = nil
                 // The path now names a new file; watch it and reload once it exists.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                    self?.arm()
-                    self?.onChange()
+                    self?.arm(reload: true)
                 }
             } else {
                 self.onChange()
@@ -104,5 +108,6 @@ public final class AurorTemplateWatcher {
         src.setCancelHandler { close(fd) }
         source = src
         src.resume()
+        if reload { onChange() }
     }
 }

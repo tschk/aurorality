@@ -98,7 +98,10 @@ fn run_ios(fx: &Fixture, envs: &[(&str, &str)]) -> (Output, String) {
         .env("PATH", format!("{}:/usr/bin:/bin", fx.bin.display()))
         .env("CARGO", fx.bin.join("cargo"))
         .env("SWIFT_PATH", fx.bin.join("swift"))
-        .env("FAKE_LOG", &fx.log);
+        .env("FAKE_LOG", &fx.log)
+        // Tests opt in explicitly; an inherited selection would override the fixture.
+        .env_remove("AURORALITY_SIMULATOR")
+        .env_remove("CARGO_TARGET_DIR");
     for (k, v) in envs {
         cmd.env(k, v);
     }

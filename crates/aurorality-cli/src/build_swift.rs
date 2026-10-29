@@ -366,9 +366,13 @@ pub fn build_and_launch_spawn(project_root: &Path, env: &[(&str, String)]) -> Re
         &cfg.resources,
     )?;
 
-    Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name))
-        .env("AURORALITY_DEV", "1")
-        .envs(env.iter().map(|(k, v)| (*k, v.as_str())))
+    let mut cmd = Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name));
+    // AURORALITY_DEV turns on the dev overlay, which connects to the WebSocket
+    // server; only `dev --serve` (which passes a port) runs one.
+    if env.iter().any(|(k, _)| *k == "AURORALITY_DEV_PORT") {
+        cmd.env("AURORALITY_DEV", "1");
+    }
+    cmd.envs(env.iter().map(|(k, v)| (*k, v.as_str())))
         .spawn()
         .map_err(|e| anyhow::anyhow!("launch {}: {e}", cfg.name))
 }
