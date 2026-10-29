@@ -23,7 +23,8 @@ const FAKE_SWIFT: &str = r#"#!/bin/sh
 echo "swift $* RUST_LIB_DIR=${AURORALITY_RUST_LIB_DIR:-unset}" >> "$FAKE_LOG"
 case "$*" in
   *arm64-apple-ios-simulator*)
-    mkdir -p .build/arm64-apple-ios-simulator/debug
+    mkdir -p .build/arm64-apple-ios-simulator/debug/Demo_Demo.bundle
+    : > .build/arm64-apple-ios-simulator/debug/Demo_Demo.bundle/main.crepus
     : > .build/arm64-apple-ios-simulator/debug/Demo
     ;;
   *)
@@ -39,7 +40,8 @@ echo "xcrun $*" >> "$FAKE_LOG"
 case "$*" in
   "-f swift") echo "$SWIFT_PATH" ;;
   *show-sdk-path*) echo "/fake/iPhoneSimulator.sdk" ;;
-  "simctl list"*) echo "    iPhone 16 (AAAA) (Booted)" ;;
+  "simctl list devices booted") [ "$FAKE_NONE_BOOTED" = "1" ] || echo "    iPhone 16 (AAAA) (Booted)" ;;
+  "simctl list devices available -j") echo '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPad Air","udid":"PAD-1"},{"name":"iPhone 17 Pro","udid":"PHONE-2"}]}}' ;;
   "simctl install"*) exit "${FAKE_INSTALL_STATUS:-0}" ;;
   "simctl launch"*) exit "${FAKE_LAUNCH_STATUS:-0}" ;;
 esac
@@ -67,6 +69,13 @@ fn fixture() -> Fixture {
     write_exe(&bin.join("cargo"), FAKE_CARGO);
     write_exe(&bin.join("swift"), FAKE_SWIFT);
     write_exe(&bin.join("xcrun"), FAKE_XCRUN);
+    std::fs::create_dir_all(project.join("assets/nested")).unwrap();
+    std::fs::write(project.join("assets/nested/logo.txt"), "x").unwrap();
+    std::fs::write(
+        project.join(".brisk.toml"),
+        "[package]\nname = \"Demo\"\n\n[app]\nbundle_id = \"dev.test.demo\"\nresources = [\"assets/nested/logo.txt\"]\n",
+    )
+    .unwrap();
     std::fs::write(
         project.join("Package.swift"),
         "// swift-tools-version:5.9\nlet package = Package(\n    name: \"Demo\",\n)\n",
@@ -123,6 +132,31 @@ fn ios_run_builds_rust_for_the_simulator_target() {
         log.lines()
             .any(|l| l.starts_with("xcrun simctl install") && l.trim_end().ends_with(".app")),
         "simctl install was not given an .app bundle:\n{log}"
+    );
+    let app = fx.project.join(".build/arm64-apple-ios-simulator/Demo.app");
+    assert!(
+        app.join("Demo_Demo.bundle/main.crepus").is_file(),
+        "SwiftPM resource bundle missing from the iOS app (Bundle.module would trap)"
+    );
+    assert!(
+        app.join("assets/nested/logo.txt").is_file(),
+        "nested file resource not copied"
+    );
+}
+
+#[test]
+fn ios_run_boots_an_available_simulator_when_none_is_booted() {
+    let fx = fixture();
+    let (out, log) = run_ios(&fx, &[("FAKE_NONE_BOOTED", "1")]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        log.lines()
+            .any(|l| l == "xcrun simctl bootstatus PHONE-2 -b"),
+        "should boot the first available iPhone by UDID:\n{log}"
     );
 }
 

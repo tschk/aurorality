@@ -115,8 +115,6 @@ fn infer_from_package(project_root: &Path) -> Result<ProjectConfig> {
 
 /// Swift triple for the arm64 iOS Simulator.
 const IOS_SIM_TRIPLE: &str = "arm64-apple-ios-simulator";
-/// Simulator booted when none is running.
-const DEFAULT_SIMULATOR: &str = "iPhone 16";
 
 /// Build and launch on iOS Simulator.
 ///
@@ -178,9 +176,10 @@ pub fn build_and_launch_ios(project_root: &Path, rust_lib_dir: &Path) -> Result<
         "simctl list",
     )?;
     if !booted.contains("Booted") {
-        println!("  no booted simulator — booting {DEFAULT_SIMULATOR}...");
+        let device = pick_simulator()?;
+        println!("  no booted simulator — booting {device}...");
         run_checked(
-            Command::new("xcrun").args(["simctl", "bootstatus", DEFAULT_SIMULATOR, "-b"]),
+            Command::new("xcrun").args(["simctl", "bootstatus", &device, "-b"]),
             "simctl bootstatus",
         )?;
     }
@@ -199,6 +198,38 @@ pub fn build_and_launch_ios(project_root: &Path, rust_lib_dir: &Path) -> Result<
 
     println!("app running in Simulator");
     Ok(())
+}
+
+/// Simulator to boot: `AURORALITY_SIMULATOR` (name or UDID), else the first
+/// available iPhone, else the first available device of any kind.
+fn pick_simulator() -> Result<String> {
+    if let Ok(dev) = std::env::var("AURORALITY_SIMULATOR") {
+        return Ok(dev);
+    }
+    let json = checked_stdout(
+        Command::new("xcrun").args(["simctl", "list", "devices", "available", "-j"]),
+        "simctl list devices available",
+    )?;
+    let parsed: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|e| anyhow::anyhow!("simctl list devices: unexpected output: {e}"))?;
+    let devices: Vec<&serde_json::Value> = parsed["devices"]
+        .as_object()
+        .into_iter()
+        .flat_map(|runtimes| runtimes.iter())
+        .filter(|(runtime, _)| runtime.contains("iOS"))
+        .flat_map(|(_, list)| list.as_array().into_iter().flatten())
+        .collect();
+    devices
+        .iter()
+        .find(|d| d["name"].as_str().is_some_and(|n| n.starts_with("iPhone")))
+        .or(devices.first())
+        .and_then(|d| d["udid"].as_str())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no available iOS simulator; create one in Xcode or set AURORALITY_SIMULATOR"
+            )
+        })
 }
 
 fn run_checked(cmd: &mut Command, what: &str) -> Result<()> {
@@ -232,12 +263,26 @@ fn create_ios_app_bundle(project_root: &Path, cfg: &ProjectConfig, bin: &Path) -
     }
     std::fs::create_dir_all(&app_dir)?;
     std::fs::copy(bin, app_dir.join(&cfg.name))?;
+    // SwiftPM resource bundles (`<Package>_<Target>.bundle`): on iOS,
+    // `Bundle.module` looks for them at the app bundle root.
+    if let Some(build_dir) = bin.parent() {
+        for entry in std::fs::read_dir(build_dir)?.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.extension().is_some_and(|e| e == "bundle") {
+                copy_dir(&path, &app_dir.join(entry.file_name()))?;
+            }
+        }
+    }
     for res in &cfg.resources {
         let src = project_root.join(res);
+        let dest = app_dir.join(res);
         if src.is_dir() {
-            copy_dir(&src, &app_dir.join(res))?;
+            copy_dir(&src, &dest)?;
         } else if src.is_file() {
-            std::fs::copy(&src, app_dir.join(res))?;
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(&src, &dest)?;
         }
     }
     let plist = format!(
