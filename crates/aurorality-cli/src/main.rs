@@ -106,7 +106,8 @@ fn main() -> Result<()> {
         Commands::Run { project, ios } => {
             pre_build()?;
             if ios {
-                build_swift::build_and_launch_ios(&project)?;
+                let rust_lib_dir = pre_build_ios()?;
+                build_swift::build_and_launch_ios(&project, &rust_lib_dir)?;
             } else {
                 build_swift::build_and_launch(&project, None)?;
             }
@@ -221,6 +222,57 @@ pub fn pre_build() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Rust target for the arm64 iOS Simulator (matches `arm64-apple-ios-simulator`).
+pub const IOS_SIM_RUST_TARGET: &str = "aarch64-apple-ios-sim";
+
+/// Build `aurorality-core` for the iOS Simulator and return a directory that
+/// contains only the static library, so the Swift link step cannot fall back
+/// to the host (macOS) build or to a dylib the app bundle does not embed.
+pub fn pre_build_ios() -> Result<PathBuf> {
+    let ws = find_workspace_root();
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    println!("building aurorality-core for {IOS_SIM_RUST_TARGET}...");
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "-p",
+            "aurorality-core",
+            "--features",
+            "js",
+            "--target",
+            IOS_SIM_RUST_TARGET,
+        ])
+        .current_dir(&ws)
+        .status()
+        .map_err(|e| anyhow::anyhow!("cargo build --target {IOS_SIM_RUST_TARGET}: {e}"))?;
+    if !status.success() {
+        anyhow::bail!(
+            "cargo build for {IOS_SIM_RUST_TARGET} failed ({}); is the target installed? \
+             (`rustup target add {IOS_SIM_RUST_TARGET}`)",
+            status.code().unwrap_or(1)
+        );
+    }
+
+    let staticlib = ws
+        .join("target")
+        .join(IOS_SIM_RUST_TARGET)
+        .join("debug/libaurorality_core.a");
+    if !staticlib.is_file() {
+        anyhow::bail!(
+            "cargo build for {IOS_SIM_RUST_TARGET} did not produce {}",
+            staticlib.display()
+        );
+    }
+    let link_dir = ws
+        .join("target")
+        .join(IOS_SIM_RUST_TARGET)
+        .join("aurorality-link");
+    std::fs::create_dir_all(&link_dir)?;
+    std::fs::copy(&staticlib, link_dir.join("libaurorality_core.a"))?;
+    Ok(std::path::absolute(&link_dir)?)
 }
 
 fn configured_pre_build_commands() -> Result<Option<Vec<String>>> {

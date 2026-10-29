@@ -162,6 +162,10 @@ Each example demonstrates the three backend styles together:
 
 `examples/hyperchat` is the larger chat prototype. Its chat routing lives in `examples/hyperchat/rust-backend`, an eqswift-backed Rust crate, while Swift owns local chat state and JavaScript scores draft routing. It combines Bitchat-style nearby mesh, Matrix federation, `../stalwart-lite` self-hosted archive semantics, and direct P2P routing into one optimized local chat surface.
 
+## iOS Simulator
+
+`aurorality run --ios` builds `aurorality-core` for `aarch64-apple-ios-sim` (install it with `rustup target add aarch64-apple-ios-sim`), links the Swift build against that static library via `AURORALITY_RUST_LIB_DIR`, wraps the binary in an iOS `.app`, and installs and launches it with `simctl`. Any failed step exits non-zero.
+
 ## Hot Reload
 
 `aurorality dev` watches `.crepus` files and pushes updates over WebSocket:
