@@ -27,10 +27,9 @@ pub fn run(watch_views: PathBuf) {
     let shutdown = Arc::new(AtomicBool::new(false));
     let child_for_signal = Arc::clone(&child);
     let shutdown_for_signal = Arc::clone(&shutdown);
-    let cwd_for_signal = cwd.clone();
     if let Err(e) = ctrlc::set_handler(move || {
         shutdown_for_signal.store(true, Ordering::Relaxed);
-        stop_running_app(&cwd_for_signal, &child_for_signal, false);
+        stop_running_app(&child_for_signal, false);
     }) {
         eprintln!("could not install Ctrl-C handler: {e}");
     }
@@ -98,7 +97,7 @@ pub fn run(watch_views: PathBuf) {
                     std::thread::sleep(Duration::from_millis(30));
                 }
 
-                stop_running_app(&cwd, &child, true);
+                stop_running_app(&child, true);
 
                 // Rebuild + relaunch
                 let mut new = child.lock().unwrap();
@@ -109,7 +108,7 @@ pub fn run(watch_views: PathBuf) {
         }
     }
 
-    stop_running_app(&cwd, &child, false);
+    stop_running_app(&child, false);
 }
 
 fn build_and_launch_app(project_root: &Path) -> Option<Child> {
@@ -125,11 +124,6 @@ fn build_and_launch_app(project_root: &Path) -> Option<Child> {
         Ok(s) if s.success() => {
             let elapsed = t0.elapsed().as_millis();
             println!("  built in {elapsed} ms — launching");
-
-            // Kill old instances before launching new one
-            if let Ok(cfg) = build_swift::read_config(project_root) {
-                let _ = Command::new("pkill").args(["-f", &cfg.name]).status();
-            }
 
             match build_swift::build_and_launch_spawn(project_root) {
                 Ok(child) => Some(child),
@@ -150,7 +144,9 @@ fn build_and_launch_app(project_root: &Path) -> Option<Child> {
     }
 }
 
-fn stop_running_app(project_root: &Path, child: &Arc<Mutex<Option<Child>>>, restarting: bool) {
+/// Stop only the app process this command started (never match by name: other
+/// processes on the machine may share the project name).
+fn stop_running_app(child: &Arc<Mutex<Option<Child>>>, restarting: bool) {
     if let Ok(mut old) = child.lock() {
         if let Some(mut c) = old.take() {
             if restarting {
@@ -159,10 +155,6 @@ fn stop_running_app(project_root: &Path, child: &Arc<Mutex<Option<Child>>>, rest
             let _ = c.kill();
             let _ = c.wait();
         }
-    }
-
-    if let Ok(cfg) = build_swift::read_config(project_root) {
-        let _ = Command::new("pkill").args(["-f", &cfg.name]).status();
     }
 }
 
