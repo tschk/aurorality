@@ -28,24 +28,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Watch views/ + Sources/, hot-reload templates over WebSocket, rebuild on code changes.
+    /// Build, launch, and live-reload the app; rebuild on code changes.
     ///
-    /// Serves `HotReloadEnvelope` messages on ws://127.0.0.1:<port> for
-    /// `HotReloadClient` (Runner, `aurorDevOverlay`). A `.crepus` save is pushed
-    /// to connected clients; Swift changes (or template saves with no client
-    /// connected) kill the app, rebuild, and relaunch it.
+    /// By default there is no server and no port: the app is launched with
+    /// `AURORALITY_VIEWS_DIR` and re-renders its own templates on save
+    /// (`AurorState.watchLiveTemplate`). Swift changes, and template saves for
+    /// apps that do not watch, kill the app, rebuild, and relaunch it.
+    ///
+    /// `--serve` also runs the WebSocket server (ws://127.0.0.1:<port>) for
+    /// `HotReloadClient`: the Runner, `aurorDevOverlay`, and real devices.
     Dev {
         /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
-        /// WebSocket port for hot-reload clients.
-        #[arg(long, default_value_t = hot_reload::DEFAULT_PORT)]
-        port: u16,
-        /// Do not send IR patches (swiftgen status only).
+        /// Also serve hot reload over WebSocket for `HotReloadClient`.
         #[arg(long)]
+        serve: bool,
+        /// WebSocket port for `--serve` (default 47832).
+        #[arg(long, requires = "serve")]
+        port: Option<u16>,
+        /// With `--serve`: do not send IR patches (swiftgen status only).
+        #[arg(long, requires = "serve")]
         no_ir: bool,
-        /// Re-run swiftgen on this `.crepus` file after each save.
-        #[arg(long, requires = "swiftgen_out")]
+        /// With `--serve`: re-run swiftgen on this `.crepus` file after each save.
+        #[arg(long, requires = "swiftgen_out", requires = "serve")]
         swiftgen_view: Option<PathBuf>,
         /// Output directory for swiftgen.
         #[arg(long, requires = "swiftgen_view")]
@@ -126,6 +132,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Dev {
             watch,
+            serve,
             port,
             no_ir,
             swiftgen_view,
@@ -142,7 +149,12 @@ fn main() -> Result<()> {
                         view_name: swiftgen_view_name,
                         context_type: swiftgen_context_type,
                     });
-            dev_loop::run(watch, port, !no_ir, swiftgen)?;
+            let serve = serve.then(|| dev_loop::Serve {
+                port: port.unwrap_or(hot_reload::DEFAULT_PORT),
+                ir_enabled: !no_ir,
+                swiftgen,
+            });
+            dev_loop::run(watch, serve)?;
         }
         Commands::Run { project, ios } => {
             pre_build()?;

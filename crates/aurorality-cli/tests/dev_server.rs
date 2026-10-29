@@ -48,7 +48,7 @@ fn dev_serves_hot_reload_over_websocket() {
         .port();
     let _child = KillOnDrop(
         Command::new(env!("CARGO_BIN_EXE_aurorality"))
-            .args(["dev", "--port", &port.to_string()])
+            .args(["dev", "--serve", "--port", &port.to_string()])
             .current_dir(&project)
             .env("CARGO", bin.join("cargo"))
             .env("SWIFT_PATH", bin.join("swift"))

@@ -46,7 +46,14 @@ fn new_project_is_a_swift_package_wired_to_aurorality() {
     assert!(package.contains("-laurorality_core"), "{package}");
 
     let app = std::fs::read_to_string(root.join("Sources/App.swift")).unwrap();
-    assert!(app.contains("Bundle.module.url(forResource: \"main\", withExtension: \"crepus\")"));
+    assert!(
+        app.contains("AurorTemplates.source(\"main\", bundle: .module)"),
+        "{app}"
+    );
+    assert!(
+        app.contains("state.watchLiveTemplate(\"main\")"),
+        "scaffold must live-reload under dev:\n{app}"
+    );
     assert!(
         app.contains(".environment(bridge)"),
         "AurorRootView requires an AurorBridge:\n{app}"

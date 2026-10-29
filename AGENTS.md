@@ -21,8 +21,8 @@ aurorality/
 │   ├── aurorality-cli/      # Dev server, build commands
 │   │   └── src/
 │   │       ├── main.rs    # CLI entry
-│   │       ├── dev_loop.rs   # watch → push / rebuild loop
-│   │       ├── hot_reload.rs # WebSocket hot-reload server
+│   │       ├── dev_loop.rs   # watch → live reload / rebuild loop (no port by default)
+│   │       ├── hot_reload.rs # WebSocket hot-reload server (`dev --serve`)
 │   │       └── scaffold.rs
 │   └── aurorality-macros/
 ├── swift/Sources/Aurorality/
@@ -31,7 +31,8 @@ aurorality/
 │   ├── AurorState.swift     # @Observable state container
 │   ├── AurorBridge.swift    # Swift plugin invoke → Rust
 │   ├── AurorApp.swift       # App entry point
-│   └── HotReloadClient.swift
+│   ├── AurorLiveTemplate.swift # in-process hot reload (AURORALITY_VIEWS_DIR)
+│   └── HotReloadClient.swift   # WebSocket client for `dev --serve`
 └── examples/
     ├── basic/
     ├── counter/

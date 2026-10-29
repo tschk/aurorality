@@ -41,7 +41,7 @@ case "$*" in
   "-f swift") echo "$SWIFT_PATH" ;;
   *show-sdk-path*) echo "/fake/iPhoneSimulator.sdk" ;;
   "simctl list devices booted") [ "$FAKE_NONE_BOOTED" = "1" ] || echo "    iPhone 16 (AAAA) (Booted)" ;;
-  "simctl list devices available -j") echo '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPad Air","udid":"PAD-1"},{"name":"iPhone 17 Pro","udid":"PHONE-2"}]}}' ;;
+  "simctl list devices available -j") echo '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-16-4":[{"name":"iPhone 14","udid":"OLD-0"}],"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPad Air","udid":"PAD-1"},{"name":"iPhone 17 Pro","udid":"PHONE-2"}]}}' ;;
   "simctl install"*) exit "${FAKE_INSTALL_STATUS:-0}" ;;
   "simctl launch"*) exit "${FAKE_LAUNCH_STATUS:-0}" ;;
 esac
@@ -156,8 +156,40 @@ fn ios_run_boots_an_available_simulator_when_none_is_booted() {
     assert!(
         log.lines()
             .any(|l| l == "xcrun simctl bootstatus PHONE-2 -b"),
-        "should boot the first available iPhone by UDID:\n{log}"
+        "should boot the first iPhone on a supported (iOS 17+) runtime:\n{log}"
     );
+    assert!(
+        log.lines()
+            .any(|l| l.starts_with("xcrun simctl install PHONE-2 ")),
+        "{log}"
+    );
+}
+
+#[test]
+fn ios_run_honours_an_explicit_simulator_even_when_another_is_booted() {
+    let fx = fixture();
+    let (out, log) = run_ios(&fx, &[("AURORALITY_SIMULATOR", "CHOSEN-9")]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        log.lines()
+            .any(|l| l == "xcrun simctl bootstatus CHOSEN-9 -b"),
+        "{log}"
+    );
+    assert!(
+        log.lines()
+            .any(|l| l.starts_with("xcrun simctl install CHOSEN-9 ")),
+        "{log}"
+    );
+    assert!(
+        log.lines()
+            .any(|l| l == "xcrun simctl launch CHOSEN-9 dev.test.demo"),
+        "{log}"
+    );
+    assert!(!log.contains(" booted "), "used the booted device:\n{log}");
 }
 
 #[test]

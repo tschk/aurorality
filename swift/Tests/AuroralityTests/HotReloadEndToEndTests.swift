@@ -47,7 +47,7 @@ final class HotReloadEndToEndTests: XCTestCase {
         let port = UInt16.random(in: 40000...59000)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cli)
-        process.arguments = ["dev", "--port", String(port)]
+        process.arguments = ["dev", "--serve", "--port", String(port)]
         process.currentDirectoryURL = project
         var env = ProcessInfo.processInfo.environment
         env["CARGO"] = bin.appendingPathComponent("cargo").path
@@ -67,7 +67,8 @@ final class HotReloadEndToEndTests: XCTestCase {
         let task = URLSession.shared.webSocketTask(with: url)
         observer = task
         task.resume()
-        Self.record(task, into: kinds)
+        let recorder = Task { await Self.record(task, into: kinds) }
+        defer { recorder.cancel() }
 
         let state = AurorState()
         let client = HotReloadClient()
@@ -86,6 +87,10 @@ final class HotReloadEndToEndTests: XCTestCase {
         }
         XCTAssertFalse(Self.text(of: state.ir).contains("first"))
         XCTAssertNil(state.error)
+        // The observer is a separate connection; wait until it has seen the patch too.
+        try await waitFor("observer saw the patch", timeout: 5) {
+            await kinds.all.contains("patch")
+        }
         let seen = await kinds.all
         XCTAssertEqual(Array(seen.prefix(2)), ["devHello", "fullReload"], "\(seen)")
         XCTAssertTrue(seen.contains("patch"), "text-only edit should be a patch: \(seen)")
@@ -99,16 +104,15 @@ final class HotReloadEndToEndTests: XCTestCase {
         func add(_ kind: String) { all.append(kind) }
     }
 
-    nonisolated private static func record(_ task: URLSessionWebSocketTask, into log: KindLog) {
-        task.receive { result in
-            guard case .success(.string(let text)) = result else { return }
+    /// One sequential receive loop, so the log keeps arrival order.
+    nonisolated private static func record(_ task: URLSessionWebSocketTask, into log: KindLog) async {
+        while case .string(let text)? = try? await task.receive() {
             if let data = text.data(using: .utf8),
                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let msg = obj["message"] as? [String: Any],
                let kind = msg["kind"] as? String {
-                Task { await log.add(kind) }
+                await log.add(kind)
             }
-            record(task, into: log)
         }
     }
 

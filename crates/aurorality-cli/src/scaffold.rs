@@ -97,13 +97,10 @@ struct {name_pascal}App: App {{
     }}
 
     private func load() {{
-        guard let url = Bundle.module.url(forResource: "main", withExtension: "crepus") else {{
-            state.error = "views/main.crepus is missing from the app bundle"
-            return
-        }}
         do {{
+            // Under `aurorality dev` this reads views/main.crepus itself; otherwise the bundled copy.
             try state.load(
-                template: String(contentsOf: url, encoding: .utf8),
+                template: AurorTemplates.source("main", bundle: .module),
                 context: [
                     "title": .string({title}),
                     "subtitle": .string("Edit views/main.crepus to get started"),
@@ -111,6 +108,8 @@ struct {name_pascal}App: App {{
         }} catch {{
             state.error = "\(error)"
         }}
+        // `aurorality dev`: re-render on every save, with the context above.
+        state.watchLiveTemplate("main")
     }}
 }}
 "#

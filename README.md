@@ -172,15 +172,30 @@ Each example demonstrates the three backend styles together:
 
 ## Hot Reload
 
-`aurorality dev` serves hot-reload messages on `ws://127.0.0.1:47832` (`--port`) and watches `views/` and `Sources/`:
+`aurorality dev` builds and launches the app, then watches `views/` and `Sources/`. **By default it opens no port.** It launches the app with `AURORALITY_VIEWS_DIR` set to the project's `views/` directory, and the app re-renders its own templates when they are saved:
 
-1. **`DevHello` on connect** — session id, watch dir, optional swiftgen paths — followed by the current template as a `fullReload`.
-2. **IR reload / patches** — unless `--no-ir`: each `.crepus` save sends an `IrMutation` patch (`replaceRoot`, `replaceNode`, …), or a full reload when the template shape changed. Templates are rendered with an empty context.
-3. **`SwiftgenStatus`** — when `--swiftgen-view` / `--swiftgen-out` are set, each save of that view re-runs `swiftgen` and reports ok/errors + output path.
+```swift
+try state.load(template: AurorTemplates.source("main", bundle: .module), context: context)
+state.watchLiveTemplate("main")   // no-op outside `aurorality dev` and in release builds
+```
 
-A template save with at least one client connected is only pushed; Swift changes, or saves with no client connected, kill the app, rebuild, and relaunch it (with `AURORALITY_DEV=1` and `AURORALITY_DEV_PORT` set).
+`AurorTemplates.source` reads the live file under `aurorality dev` (DEBUG builds) and the bundled copy otherwise. `watchLiveTemplate` re-renders on each save with the context the app last passed to `load`, so `{title}` and other variables still resolve. A broken save sets `state.error`, and the next good save clears it. Projects created by `aurorality new` and `examples/basic` are already wired up this way.
 
-Swift hosts use **`HotReloadClient`** → **`HotReloadBus`** and optional **`AurorDevOverlay`** (`AURORALITY_DEV=1` or `.environment(\.aurorDevEnabled, true)`) for a corner HUD + live IR toggle.
+A template save needs no rebuild while such an app is running. Swift changes, and template saves for apps that don't call `watchLiveTemplate`, kill the app, rebuild it, and relaunch it.
+
+**Limits:**
+- **macOS and the iOS Simulator only.** The app has to read the template from the host filesystem. Real devices need `--serve`.
+- **Each save re-renders the whole template.** There is no incremental patch.
+
+### `dev --serve`: WebSocket server
+
+`aurorality dev --serve` also serves hot reload on `ws://127.0.0.1:47832` (`--port`), and passes `AURORALITY_DEV_PORT` to the launched app. Use it for `HotReloadClient` consumers: the Runner preview app, `AurorDevOverlay`, and real devices.
+
+1. **`DevHello` on connect**: session id, watch dir, optional swiftgen paths. The current template follows as a `fullReload`.
+2. **IR reload / patches**, unless `--no-ir`: each `.crepus` save sends an `IrMutation` patch (`replaceRoot`, `replaceNode`, …), or a full reload when the template's shape changed. **The server renders with an empty context**, so templates that use app context variables show them unresolved. In-process reload doesn't have this problem.
+3. **`SwiftgenStatus`**: when `--swiftgen-view` / `--swiftgen-out` are set, each save of that view re-runs `swiftgen` and reports ok/errors plus the output path.
+
+Browser connections (handshakes with an `Origin` header) are rejected. Swift hosts use **`HotReloadClient`** → **`HotReloadBus`**, and optionally **`AurorDevOverlay`** (`AURORALITY_DEV=1` or `.environment(\.aurorDevEnabled, true)`) for a corner HUD and a live IR toggle.
 
 ## Persistence (`aurorStore`)
 
