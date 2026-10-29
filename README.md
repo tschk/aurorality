@@ -170,6 +170,8 @@ Each example demonstrates the three backend styles together:
 
 `aurorality run --ios` builds `aurorality-core` for `aarch64-apple-ios-sim` (install it with `rustup target add aarch64-apple-ios-sim`), links the Swift build against that static library via `AURORALITY_RUST_LIB_DIR`, wraps the binary in an iOS `.app`, and installs and launches it with `simctl`. Any failed step exits non-zero.
 
+The Rust library is looked up in `CARGO_TARGET_DIR` when that variable is set (a relative path resolves against the aurorality checkout), otherwise in the checkout's `target/`. A `build.target-dir` set in `.cargo/config.toml` is **not** read; if you use one, also export `CARGO_TARGET_DIR` with the same path.
+
 ## Hot Reload
 
 `aurorality dev` builds and launches the app, then watches `views/` and `Sources/`. **By default it opens no port.** It launches the app with `AURORALITY_VIEWS_DIR` set to the project's `views/` directory, and the app re-renders its own templates when they are saved:
