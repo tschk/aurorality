@@ -16,6 +16,7 @@ use crepuscularity_core::context::TemplateContext;
 use crepuscularity_native::{
     plan_hot_reload, render_template_to_ir, HotReloadEnvelope, HotReloadMessage,
 };
+use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::{Message, WebSocket};
 
 pub const DEFAULT_PORT: u16 = 47832;
@@ -38,7 +39,9 @@ pub struct HotReloadServer {
     cfg: ServerConfig,
     session_id: String,
     seq: AtomicU64,
-    clients: Mutex<Vec<WebSocket<TcpStream>>>,
+    /// Connected clients by id; a per-client reader thread removes its entry on EOF.
+    clients: Mutex<Vec<(u64, WebSocket<TcpStream>)>>,
+    next_client: AtomicU64,
     /// Last seen contents of each template, and which one clients are showing.
     templates: Mutex<(HashMap<PathBuf, String>, Option<PathBuf>)>,
 }
@@ -81,6 +84,7 @@ impl HotReloadServer {
             // saw; seeding from the clock keeps a restarted server ahead.
             seq: AtomicU64::new(now_ms()),
             clients: Mutex::new(Vec::new()),
+            next_client: AtomicU64::new(0),
             templates: Mutex::new((templates, active)),
         });
         let accept = Arc::clone(&server);
@@ -105,9 +109,24 @@ impl HotReloadServer {
         Message::text(serde_json::to_string(&envelope).unwrap_or_default())
     }
 
-    fn accept_client(&self, stream: TcpStream) {
+    fn accept_client(self: &Arc<Self>, stream: TcpStream) {
         let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-        let Ok(mut ws) = tungstenite::accept(stream) else {
+        // Browsers always send `Origin`; native clients (URLSessionWebSocketTask)
+        // do not. Rejecting it stops any web page from reading project paths and IR.
+        #[allow(clippy::result_large_err)] // signature fixed by tungstenite's `Callback`
+        let reject_browsers = |req: &Request, resp: Response| {
+            if req.headers().contains_key("origin") {
+                let mut deny = ErrorResponse::new(Some("browser origins are not allowed".into()));
+                *deny.status_mut() = tungstenite::http::StatusCode::FORBIDDEN;
+                Err(deny)
+            } else {
+                Ok(resp)
+            }
+        };
+        let Ok(reader) = stream.try_clone() else {
+            return;
+        };
+        let Ok(mut ws) = tungstenite::accept_hdr(stream, reject_browsers) else {
             return;
         };
         let swiftgen = self.cfg.swiftgen.as_ref();
@@ -135,13 +154,23 @@ impl HotReloadServer {
                 }
             }
         }
-        self.clients.lock().unwrap().push(ws);
+        let id = self.next_client.fetch_add(1, Ordering::SeqCst);
+        self.clients.lock().unwrap().push((id, ws));
+        // Clients never send anything we need; read only to notice the close so
+        // `client_count` does not keep counting an app that has exited.
+        let server = Arc::clone(self);
+        std::thread::spawn(move || {
+            let mut reader = reader;
+            let mut buf = [0u8; 1024];
+            while matches!(std::io::Read::read(&mut reader, &mut buf), Ok(n) if n > 0) {}
+            server.clients.lock().unwrap().retain(|(cid, _)| *cid != id);
+        });
     }
 
     fn broadcast(&self, message: HotReloadMessage) {
         let msg = self.envelope(message);
         let mut clients = self.clients.lock().unwrap();
-        clients.retain_mut(|ws| ws.send(msg.clone()).is_ok());
+        clients.retain_mut(|(_, ws)| ws.send(msg.clone()).is_ok());
     }
 
     /// Re-read a saved `.crepus` file and push the resulting update to clients.
@@ -260,5 +289,25 @@ mod tests {
         assert!(matches!(kind, "patch" | "fullReload"), "{update}");
         assert!(update.to_string().contains("second"), "{update}");
         assert!(!update.to_string().contains("first"), "{update}");
+
+        drop(ws);
+        for _ in 0..100 {
+            if server.client_count() == 0 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(server.client_count(), 0, "closed client still registered");
+
+        let mut req = tungstenite::client::IntoClientRequest::into_client_request(format!(
+            "ws://127.0.0.1:{port}"
+        ))
+        .unwrap();
+        req.headers_mut()
+            .insert("Origin", "https://evil.example".parse().unwrap());
+        assert!(
+            tungstenite::connect(req).is_err(),
+            "browser origin accepted"
+        );
     }
 }

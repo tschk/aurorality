@@ -2,8 +2,17 @@
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+/// Kills `aurorality dev` even if an assertion panics.
+struct KillOnDrop(Child);
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
 
 #[test]
 fn dev_serves_hot_reload_over_websocket() {
@@ -37,15 +46,17 @@ fn dev_serves_hot_reload_over_websocket() {
         .local_addr()
         .unwrap()
         .port();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_aurorality"))
-        .args(["dev", "--port", &port.to_string()])
-        .current_dir(&project)
-        .env("CARGO", bin.join("cargo"))
-        .env("SWIFT_PATH", bin.join("swift"))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
+    let _child = KillOnDrop(
+        Command::new(env!("CARGO_BIN_EXE_aurorality"))
+            .args(["dev", "--port", &port.to_string()])
+            .current_dir(&project)
+            .env("CARGO", bin.join("cargo"))
+            .env("SWIFT_PATH", bin.join("swift"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
 
     let url = format!("ws://127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -57,15 +68,15 @@ fn dev_serves_hot_reload_over_websocket() {
         }
     };
     let result = connected.map(|mut ws| {
+        if let tungstenite::stream::MaybeTlsStream::Plain(s) = ws.get_mut() {
+            s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        }
         let hello: serde_json::Value =
             serde_json::from_str(ws.read().unwrap().to_text().unwrap()).unwrap();
         let ir: serde_json::Value =
             serde_json::from_str(ws.read().unwrap().to_text().unwrap()).unwrap();
         (hello, ir)
     });
-    let _ = child.kill();
-    let _ = child.wait();
-
     let (hello, ir) = result.expect("aurorality dev did not accept a WebSocket connection");
     assert_eq!(hello["message"]["kind"], "devHello", "{hello}");
     assert_eq!(ir["message"]["kind"], "fullReload", "{ir}");

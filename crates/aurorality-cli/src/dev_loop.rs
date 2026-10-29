@@ -38,10 +38,7 @@ pub fn run(
     println!("hot reload on ws://127.0.0.1:{port}");
 
     // Pre-build Rust + bindings (only once)
-    if let Err(e) = crate::pre_build() {
-        eprintln!("pre-build failed: {e}");
-        return Ok(());
-    }
+    crate::pre_build().map_err(|e| anyhow::anyhow!("pre-build failed: {e}"))?;
 
     let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -85,10 +82,7 @@ pub fn run(
         }
     }) {
         Ok(w) => w,
-        Err(e) => {
-            eprintln!("could not create file watcher: {e}");
-            return Ok(());
-        }
+        Err(e) => anyhow::bail!("could not create file watcher: {e}"),
     };
 
     for path in &watched_resources {
@@ -131,7 +125,8 @@ pub fn run(
                 {
                     server.template_changed(p);
                 }
-                if templates_only && server.client_count() > 0 {
+                // With --no-ir the server pushes no template updates, so rebuild.
+                if templates_only && ir_enabled && server.client_count() > 0 {
                     println!(
                         "  pushed template update to {} client(s)",
                         server.client_count()
