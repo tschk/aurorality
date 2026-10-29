@@ -57,8 +57,14 @@ enum Commands {
         out: PathBuf,
     },
 
-    /// Scaffold a new aurorality project.
-    New { name: String },
+    /// Scaffold a new aurorality project (a SwiftPM package).
+    New {
+        name: String,
+        /// Path to the aurorality checkout the project builds against
+        /// (defaults to the checkout this CLI was built from).
+        #[arg(long)]
+        aurorality: Option<PathBuf>,
+    },
 
     /// Bundle JS + compile .crepus templates to IR JSON.
     Bundle {
@@ -115,8 +121,8 @@ fn main() -> Result<()> {
         Commands::Build { watch, out } => {
             build_all(&watch, &out)?;
         }
-        Commands::New { name } => {
-            scaffold::new_project(&name)?;
+        Commands::New { name, aurorality } => {
+            scaffold::new_project(&name, aurorality.as_deref())?;
         }
         Commands::Bundle {
             views,
