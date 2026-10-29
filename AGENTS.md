@@ -21,7 +21,8 @@ aurorality/
 │   ├── aurorality-cli/      # Dev server, build commands
 │   │   └── src/
 │   │       ├── main.rs    # CLI entry
-│   │       ├── dev_server.rs
+│   │       ├── dev_loop.rs   # watch → push / rebuild loop
+│   │       ├── hot_reload.rs # WebSocket hot-reload server
 │   │       └── scaffold.rs
 │   └── aurorality-macros/
 ├── swift/Sources/Aurorality/
@@ -90,8 +91,8 @@ cargo build -p aurorality-core
 # Test
 cargo test -p aurorality-core
 
-# Dev server
-cargo run -p aurorality-cli -- dev examples/basic
+# Dev server (run from a project directory)
+cd examples/basic && cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- dev
 ```
 
 ## Current Coverage Gaps

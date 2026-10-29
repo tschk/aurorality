@@ -39,8 +39,13 @@ fn dev_does_not_kill_unrelated_processes_sharing_the_project_name() {
         .spawn()
         .unwrap();
 
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let mut dev = Command::new(env!("CARGO_BIN_EXE_aurorality"))
-        .args(["dev"])
+        .args(["dev", "--port", &port.to_string()])
         .current_dir(&project)
         .env("CARGO", bin.join("cargo"))
         .env("SWIFT_PATH", bin.join("swift"))

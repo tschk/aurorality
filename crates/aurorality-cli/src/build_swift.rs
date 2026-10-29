@@ -275,7 +275,7 @@ fn create_ios_app_bundle(project_root: &Path, cfg: &ProjectConfig, bin: &Path) -
 }
 
 /// Build project, wrap in .app bundle, launch with `open` — returns Child.
-pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
+pub fn build_and_launch_spawn(project_root: &Path, dev_port: u16) -> Result<Child> {
     let cfg = read_config(project_root)?;
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
     let bin =
@@ -290,6 +290,8 @@ pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
     )?;
 
     Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name))
+        .env("AURORALITY_DEV", "1")
+        .env("AURORALITY_DEV_PORT", dev_port.to_string())
         .spawn()
         .map_err(|e| anyhow::anyhow!("launch {}: {e}", cfg.name))
 }

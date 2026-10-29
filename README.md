@@ -69,8 +69,8 @@ cp generated/aurorality_coreFFI.modulemap generated/module.modulemap
 # Run an example
 cd examples/counter && ./run.sh
 
-# Or start the dev server
-cargo run -p aurorality-cli -- dev examples/basic
+# Or start the dev server (from the project directory)
+cd examples/basic && cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- dev
 ```
 
 ## Template Syntax
@@ -172,11 +172,13 @@ Each example demonstrates the three backend styles together:
 
 ## Hot Reload
 
-`aurorality dev` watches `.crepus` files and pushes updates over WebSocket:
+`aurorality dev` serves hot-reload messages on `ws://127.0.0.1:47832` (`--port`) and watches `views/` and `Sources/`:
 
-1. **`DevHello` on connect** — session id, roots, optional swiftgen paths.
-2. **IR reload / patches** — unless `--no-ir`: full IR plus incremental `IrMutation` ops (`replaceRoot`, `replaceNode`, …).
-3. **`SwiftgenStatus`** — when `--swiftgen-view` / `--swiftgen-out` are set, each save re-runs `swiftgen` and reports ok/errors + output path.
+1. **`DevHello` on connect** — session id, watch dir, optional swiftgen paths — followed by the current template as a `fullReload`.
+2. **IR reload / patches** — unless `--no-ir`: each `.crepus` save sends an `IrMutation` patch (`replaceRoot`, `replaceNode`, …), or a full reload when the template shape changed. Templates are rendered with an empty context.
+3. **`SwiftgenStatus`** — when `--swiftgen-view` / `--swiftgen-out` are set, each save of that view re-runs `swiftgen` and reports ok/errors + output path.
+
+A template save with at least one client connected is only pushed; Swift changes, or saves with no client connected, kill the app, rebuild, and relaunch it (with `AURORALITY_DEV=1` and `AURORALITY_DEV_PORT` set).
 
 Swift hosts use **`HotReloadClient`** → **`HotReloadBus`** and optional **`AurorDevOverlay`** (`AURORALITY_DEV=1` or `.environment(\.aurorDevEnabled, true)`) for a corner HUD + live IR toggle.
 

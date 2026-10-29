@@ -1,7 +1,9 @@
-//! `aurorality dev` — watch → rebuild → relaunch loop.
+//! `aurorality dev` — hot-reload server plus watch → rebuild → relaunch loop.
 //!
-//! Watches `views/` and `Sources/`. On change: swift build, kill old app,
-//! launch new app. No WebSocket, no ports — same pattern as `crepus dev`.
+//! Serves template updates over WebSocket (see [`crate::hot_reload`]). Watches
+//! `views/` and `Sources/`: `.crepus` saves are pushed to connected clients;
+//! anything else (or a template save with no client connected) kills the app,
+//! rebuilds with `swift build`, and relaunches it.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -12,15 +14,33 @@ use std::time::{Duration, Instant};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 
 use crate::build_swift;
+use crate::hot_reload::{HotReloadServer, ServerConfig, SwiftgenConfig};
 
-/// Build from scratch, then watch → rebuild → relaunch.
-pub fn run(watch_views: PathBuf) {
+/// Start the hot-reload server, build, then watch → push / rebuild → relaunch.
+pub fn run(
+    watch_views: PathBuf,
+    port: u16,
+    ir_enabled: bool,
+    swiftgen: Option<SwiftgenConfig>,
+) -> anyhow::Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    let listener = std::net::TcpListener::bind(("127.0.0.1", port))
+        .map_err(|e| anyhow::anyhow!("hot-reload server: bind 127.0.0.1:{port}: {e}"))?;
+    let server = HotReloadServer::start(
+        listener,
+        ServerConfig {
+            watch_dir: cwd.join(&watch_views),
+            ir_enabled,
+            swiftgen,
+        },
+    );
+    println!("hot reload on ws://127.0.0.1:{port}");
 
     // Pre-build Rust + bindings (only once)
     if let Err(e) = crate::pre_build() {
         eprintln!("pre-build failed: {e}");
-        return;
+        return Ok(());
     }
 
     let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
@@ -45,7 +65,7 @@ pub fn run(watch_views: PathBuf) {
     );
     {
         let mut child = child.lock().unwrap();
-        *child = build_and_launch_app(&cwd);
+        *child = build_and_launch_app(&cwd, port);
     }
 
     // File watcher
@@ -67,7 +87,7 @@ pub fn run(watch_views: PathBuf) {
         Ok(w) => w,
         Err(e) => {
             eprintln!("could not create file watcher: {e}");
-            return;
+            return Ok(());
         }
     };
 
@@ -89,19 +109,41 @@ pub fn run(watch_views: PathBuf) {
         }
 
         match rx.recv_timeout(Duration::from_millis(200)) {
-            Ok(_) => {
-                // Debounce: drain for 300ms
+            Ok(first) => {
+                // Debounce: collect changes for 300ms
+                let mut changed = vec![first];
                 let t = Instant::now();
                 while t.elapsed() < Duration::from_millis(300) {
-                    while rx.try_recv().is_ok() {}
+                    while let Ok(p) = rx.try_recv() {
+                        changed.push(p);
+                    }
                     std::thread::sleep(Duration::from_millis(30));
+                }
+                changed.sort();
+                changed.dedup();
+
+                let templates_only = changed
+                    .iter()
+                    .all(|p| p.extension().is_some_and(|e| e == "crepus"));
+                for p in changed
+                    .iter()
+                    .filter(|p| p.extension().is_some_and(|e| e == "crepus"))
+                {
+                    server.template_changed(p);
+                }
+                if templates_only && server.client_count() > 0 {
+                    println!(
+                        "  pushed template update to {} client(s)",
+                        server.client_count()
+                    );
+                    continue;
                 }
 
                 stop_running_app(&child, true);
 
                 // Rebuild + relaunch
                 let mut new = child.lock().unwrap();
-                *new = build_and_launch_app(&cwd);
+                *new = build_and_launch_app(&cwd, port);
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
@@ -109,9 +151,10 @@ pub fn run(watch_views: PathBuf) {
     }
 
     stop_running_app(&child, false);
+    Ok(())
 }
 
-fn build_and_launch_app(project_root: &Path) -> Option<Child> {
+fn build_and_launch_app(project_root: &Path, port: u16) -> Option<Child> {
     let swift = crate::find_swift();
     let t0 = Instant::now();
 
@@ -125,7 +168,7 @@ fn build_and_launch_app(project_root: &Path) -> Option<Child> {
             let elapsed = t0.elapsed().as_millis();
             println!("  built in {elapsed} ms — launching");
 
-            match build_swift::build_and_launch_spawn(project_root) {
+            match build_swift::build_and_launch_spawn(project_root, port) {
                 Ok(child) => Some(child),
                 Err(e) => {
                     eprintln!("  launch failed: {e}");

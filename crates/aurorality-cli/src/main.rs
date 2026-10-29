@@ -4,6 +4,7 @@ mod bindgen;
 mod build_swift;
 mod bundle;
 mod dev_loop;
+mod hot_reload;
 mod scaffold;
 mod swiftgen;
 mod swiftgen_style;
@@ -27,15 +28,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Watch views/ + Sources/, rebuild + relaunch on change.
+    /// Watch views/ + Sources/, hot-reload templates over WebSocket, rebuild on code changes.
     ///
-    /// Pre-builds Rust core + bindings once, then watches for file changes.
-    /// On any change: kills the running app, rebuilds Swift, and relaunches.
-    /// No WebSocket, no ports — same pattern as `crepus dev`.
+    /// Serves `HotReloadEnvelope` messages on ws://127.0.0.1:<port> for
+    /// `HotReloadClient` (Runner, `aurorDevOverlay`). A `.crepus` save is pushed
+    /// to connected clients; Swift changes (or template saves with no client
+    /// connected) kill the app, rebuild, and relaunch it.
     Dev {
         /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
+        /// WebSocket port for hot-reload clients.
+        #[arg(long, default_value_t = hot_reload::DEFAULT_PORT)]
+        port: u16,
+        /// Do not send IR patches (swiftgen status only).
+        #[arg(long)]
+        no_ir: bool,
+        /// Re-run swiftgen on this `.crepus` file after each save.
+        #[arg(long, requires = "swiftgen_out")]
+        swiftgen_view: Option<PathBuf>,
+        /// Output directory for swiftgen.
+        #[arg(long, requires = "swiftgen_view")]
+        swiftgen_out: Option<PathBuf>,
+        #[arg(long, default_value = "GeneratedView")]
+        swiftgen_view_name: String,
+        #[arg(long, default_value = "HyperChatContext")]
+        swiftgen_context_type: String,
     },
 
     /// Build and launch the SwiftUI app.
@@ -106,8 +124,25 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Dev { watch } => {
-            dev_loop::run(watch);
+        Commands::Dev {
+            watch,
+            port,
+            no_ir,
+            swiftgen_view,
+            swiftgen_out,
+            swiftgen_view_name,
+            swiftgen_context_type,
+        } => {
+            let swiftgen =
+                swiftgen_view
+                    .zip(swiftgen_out)
+                    .map(|(view, out)| hot_reload::SwiftgenConfig {
+                        view,
+                        out,
+                        view_name: swiftgen_view_name,
+                        context_type: swiftgen_context_type,
+                    });
+            dev_loop::run(watch, port, !no_ir, swiftgen)?;
         }
         Commands::Run { project, ios } => {
             pre_build()?;
