@@ -8,6 +8,10 @@ public final class AurorState {
     public var error: String?
 
     private var rawTemplate: String = ""
+    /// Context of the last `load`, reused when a live template is re-rendered.
+    private(set) var lastContext: [String: ContextValue] = [:]
+    /// Live-template watchers started by `watchLiveTemplate` (kept alive with the state).
+    @ObservationIgnored var liveWatchers: [String: AurorTemplateWatcher] = [:]
 
     public init() {}
 
@@ -16,6 +20,7 @@ public final class AurorState {
     /// Render a `.crepus` template with an optional context dict and update `ir`.
     public func load(template: String, context: [String: ContextValue] = [:]) throws {
         rawTemplate = template
+        lastContext = context
         let contextJson = try encodeContext(context)
         let irJson = try renderTemplate(template: template, contextJson: contextJson)
         ir = try JSONDecoder().decode(ViewIr.self, from: Data(irJson.utf8))

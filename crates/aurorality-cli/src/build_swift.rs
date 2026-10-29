@@ -113,73 +113,246 @@ fn infer_from_package(project_root: &Path) -> Result<ProjectConfig> {
     })
 }
 
+/// Swift triple for the arm64 iOS Simulator.
+const IOS_SIM_TRIPLE: &str = "arm64-apple-ios-simulator";
+
 /// Build and launch on iOS Simulator.
-pub fn build_and_launch_ios(project_root: &Path) -> Result<()> {
+///
+/// `rust_lib_dir` must hold `libaurorality_core.a` built for the simulator
+/// (see [`crate::pre_build_ios`]); it is passed to SwiftPM through
+/// `AURORALITY_RUST_LIB_DIR`. Every step's exit status is checked.
+pub fn build_and_launch_ios(project_root: &Path, rust_lib_dir: &Path) -> Result<()> {
     let cfg = read_config(project_root)?;
     let swift = find_swift();
 
-    let sdk_path = String::from_utf8(
-        Command::new("xcrun")
-            .args(["--sdk", "iphonesimulator", "--show-sdk-path"])
-            .output()
-            .map_err(|e| anyhow::anyhow!("xcrun: {e}"))?
-            .stdout,
-    )?
-    .trim()
-    .to_string();
+    let sdk_path = checked_stdout(
+        Command::new("xcrun").args(["--sdk", "iphonesimulator", "--show-sdk-path"]),
+        "xcrun --show-sdk-path",
+    )?;
+    if sdk_path.is_empty() {
+        anyhow::bail!("xcrun returned no iphonesimulator SDK path");
+    }
 
     println!("building {} for iOS Simulator...", cfg.name);
     let status = Command::new(&swift)
         .args([
             "build",
             "--triple",
-            "arm64-apple-ios-simulator",
+            IOS_SIM_TRIPLE,
             "-Xswiftc",
             "-sdk",
             "-Xswiftc",
             &sdk_path,
         ])
+        .env("AURORALITY_RUST_LIB_DIR", rust_lib_dir)
         .current_dir(project_root)
         .status()
         .map_err(|e| anyhow::anyhow!("swift build ios: {e}"))?;
     if !status.success() {
-        anyhow::bail!("ios build failed");
+        anyhow::bail!("ios build failed ({})", status.code().unwrap_or(1));
     }
 
+    // Only accept the simulator-triple binary; `.build/debug` may be a macOS build.
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
-    let bin =
-        find_binary(project_root, &bin_name).or_else(|_| find_binary(project_root, &cfg.name))?;
+    let triple_dir = project_root
+        .join(".build")
+        .join(IOS_SIM_TRIPLE)
+        .join("debug");
+    let bin = [&bin_name, &cfg.name]
+        .into_iter()
+        .map(|n| triple_dir.join(n))
+        .find(|p| p.is_file())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "iOS Simulator binary {bin_name} not found in {}",
+                triple_dir.display()
+            )
+        })?;
 
-    println!("launching in iOS Simulator...");
-    let booted = Command::new("xcrun")
-        .args(["simctl", "list", "booted", "devices"])
-        .output()
-        .map_err(|e| anyhow::anyhow!("simctl list: {e}"))?;
-    if booted.stdout.is_empty() || !String::from_utf8_lossy(&booted.stdout).contains("iPhone") {
-        eprintln!("  no booted simulator — booting iPhone 16...");
-        Command::new("xcrun")
-            .args(["simctl", "boot", "iPhone 16"])
-            .status()
-            .ok();
-        std::thread::sleep(std::time::Duration::from_secs(5));
+    let app_dir = create_ios_app_bundle(project_root, &cfg, &bin)?;
+
+    // An explicit AURORALITY_SIMULATOR wins over whatever is booted; else use a
+    // booted simulator; else boot a compatible one.
+    let device = match std::env::var("AURORALITY_SIMULATOR") {
+        Ok(dev) => Some(dev),
+        Err(_) => {
+            let booted = checked_stdout(
+                Command::new("xcrun").args(["simctl", "list", "devices", "booted"]),
+                "simctl list",
+            )?;
+            if booted.contains("Booted") {
+                None
+            } else {
+                Some(pick_simulator()?)
+            }
+        }
+    };
+    if let Some(dev) = &device {
+        println!("  booting simulator {dev}...");
+        // Boots the device if needed and waits until it is ready.
+        run_checked(
+            Command::new("xcrun").args(["simctl", "bootstatus", dev, "-b"]),
+            "simctl bootstatus",
+        )?;
     }
+    let target = device.as_deref().unwrap_or("booted");
 
-    Command::new("xcrun")
-        .args(["simctl", "install", "booted", &bin.display().to_string()])
-        .status()
-        .map_err(|e| anyhow::anyhow!("simctl install: {e}"))?;
-
-    Command::new("xcrun")
-        .args(["simctl", "launch", "booted", &cfg.bundle_id])
-        .status()
-        .map_err(|e| anyhow::anyhow!("simctl launch: {e}"))?;
+    println!("installing in iOS Simulator...");
+    run_checked(
+        Command::new("xcrun")
+            .args(["simctl", "install", target])
+            .arg(&app_dir),
+        "simctl install",
+    )?;
+    run_checked(
+        Command::new("xcrun").args(["simctl", "launch", target, &cfg.bundle_id]),
+        "simctl launch",
+    )?;
 
     println!("app running in Simulator");
     Ok(())
 }
 
+/// Oldest iOS runtime the generated app supports (`MinimumOSVersion`).
+const IOS_MIN_MAJOR: u32 = 17;
+
+/// Simulator to boot when none is booted: the first available iPhone on a
+/// runtime the app supports, else any such device.
+fn pick_simulator() -> Result<String> {
+    let json = checked_stdout(
+        Command::new("xcrun").args(["simctl", "list", "devices", "available", "-j"]),
+        "simctl list devices available",
+    )?;
+    let parsed: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|e| anyhow::anyhow!("simctl list devices: unexpected output: {e}"))?;
+    let devices: Vec<&serde_json::Value> = parsed["devices"]
+        .as_object()
+        .into_iter()
+        .flat_map(|runtimes| runtimes.iter())
+        // Runtime keys look like `com.apple.CoreSimulator.SimRuntime.iOS-27-0`.
+        .filter(|(runtime, _)| {
+            runtime
+                .rsplit_once("iOS-")
+                .and_then(|(_, v)| v.split('-').next()?.parse::<u32>().ok())
+                .is_some_and(|major| major >= IOS_MIN_MAJOR)
+        })
+        .flat_map(|(_, list)| list.as_array().into_iter().flatten())
+        .collect();
+    devices
+        .iter()
+        .find(|d| d["name"].as_str().is_some_and(|n| n.starts_with("iPhone")))
+        .or(devices.first())
+        .and_then(|d| d["udid"].as_str())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no available iOS {IOS_MIN_MAJOR}+ simulator; create one in Xcode or set AURORALITY_SIMULATOR"
+            )
+        })
+}
+
+/// Copy SwiftPM resource bundles (`<Package>_<Target>.bundle`) built next to
+/// `bin` into `dest`, the app's resource directory. `Bundle.module` looks in
+/// `Bundle.main.resourceURL`, and current toolchains have no build-path fallback,
+/// so without this an app that loads resources traps on launch.
+fn copy_swiftpm_bundles(bin: &Path, dest: &Path) -> Result<()> {
+    let Some(build_dir) = bin.parent() else {
+        return Ok(());
+    };
+    for entry in std::fs::read_dir(build_dir)?.flatten() {
+        let path = entry.path();
+        if path.is_dir() && path.extension().is_some_and(|e| e == "bundle") {
+            let target = dest.join(entry.file_name());
+            if target.exists() {
+                std::fs::remove_dir_all(&target)?;
+            }
+            copy_dir(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+fn run_checked(cmd: &mut Command, what: &str) -> Result<()> {
+    let status = cmd.status().map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
+    if !status.success() {
+        anyhow::bail!("{what} failed ({})", status.code().unwrap_or(1));
+    }
+    Ok(())
+}
+
+fn checked_stdout(cmd: &mut Command, what: &str) -> Result<String> {
+    let out = cmd.output().map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "{what} failed ({}): {}",
+            out.status.code().unwrap_or(1),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// iOS bundles are flat: executable + Info.plist at the bundle root.
+fn create_ios_app_bundle(project_root: &Path, cfg: &ProjectConfig, bin: &Path) -> Result<PathBuf> {
+    let app_dir = project_root
+        .join(".build")
+        .join(IOS_SIM_TRIPLE)
+        .join(format!("{}.app", cfg.name));
+    if app_dir.exists() {
+        std::fs::remove_dir_all(&app_dir)?;
+    }
+    std::fs::create_dir_all(&app_dir)?;
+    std::fs::copy(bin, app_dir.join(&cfg.name))?;
+    // On iOS the resource URL is the app bundle root.
+    copy_swiftpm_bundles(bin, &app_dir)?;
+    for res in &cfg.resources {
+        let src = project_root.join(res);
+        let dest = app_dir.join(res);
+        if src.is_dir() {
+            copy_dir(&src, &dest)?;
+        } else if src.is_file() {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(&src, &dest)?;
+        }
+    }
+    let plist = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>{name}</string>
+    <key>CFBundleIdentifier</key>
+    <string>{bundle_id}</string>
+    <key>CFBundleName</key>
+    <string>{name}</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array><string>iPhoneSimulator</string></array>
+    <key>MinimumOSVersion</key>
+    <string>17.0</string>
+    <key>UIDeviceFamily</key>
+    <array><integer>1</integer><integer>2</integer></array>
+    <key>UILaunchScreen</key>
+    <dict/>
+</dict>
+</plist>"#,
+        name = cfg.name,
+        bundle_id = cfg.bundle_id,
+    );
+    std::fs::write(app_dir.join("Info.plist"), plist)?;
+    Ok(app_dir)
+}
+
 /// Build project, wrap in .app bundle, launch with `open` — returns Child.
-pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
+pub fn build_and_launch_spawn(project_root: &Path, env: &[(&str, String)]) -> Result<Child> {
     let cfg = read_config(project_root)?;
     let bin_name = package_name(project_root).unwrap_or_else(|| cfg.name.clone());
     let bin =
@@ -193,7 +366,13 @@ pub fn build_and_launch_spawn(project_root: &Path) -> Result<Child> {
         &cfg.resources,
     )?;
 
-    Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name))
+    let mut cmd = Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name));
+    // AURORALITY_DEV turns on the dev overlay, which connects to the WebSocket
+    // server; only `dev --serve` (which passes a port) runs one.
+    if env.iter().any(|(k, _)| *k == "AURORALITY_DEV_PORT") {
+        cmd.env("AURORALITY_DEV", "1");
+    }
+    cmd.envs(env.iter().map(|(k, v)| (*k, v.as_str())))
         .spawn()
         .map_err(|e| anyhow::anyhow!("launch {}: {e}", cfg.name))
 }
@@ -258,6 +437,7 @@ fn create_app_bundle(
 
     let dest_bin = macos_dir.join(name);
     std::fs::copy(bin, &dest_bin)?;
+    copy_swiftpm_bundles(bin, &res_dir)?;
 
     #[cfg(unix)]
     {

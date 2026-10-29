@@ -1,7 +1,9 @@
 // swift-tools-version:5.9
+import Foundation
 import PackageDescription
 
-let rustLibDir = "target/debug"
+// `aurorality run --ios` points this at the iOS Simulator build of aurorality-core.
+let rustLibDir = ProcessInfo.processInfo.environment["AURORALITY_RUST_LIB_DIR"] ?? "target/debug"
 
 // NOTE: Run `cargo build -p aurorality-core` and the uniffi-bindgen step before
 // opening this package. The generated/ directory must contain:
