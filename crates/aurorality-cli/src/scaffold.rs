@@ -164,7 +164,7 @@ commands = [
     std::fs::write(root.join(".gitignore"), ".build/\n*.resolved\n")?;
 
     println!("created project: {name}");
-    println!("  cd {name} && aurorality run");
+    println!("  cd {} && aurorality run", sh_quote(name));
     Ok(())
 }
 

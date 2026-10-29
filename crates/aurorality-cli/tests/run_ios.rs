@@ -12,8 +12,9 @@ echo "cargo $*" >> "$FAKE_LOG"
 case "$*" in
   *--target*)
     [ "$FAKE_CARGO_IOS_FAIL" = "1" ] && exit 101
-    mkdir -p target/aarch64-apple-ios-sim/debug
-    : > target/aarch64-apple-ios-sim/debug/libaurorality_core.a
+    out="${CARGO_TARGET_DIR:-target}/aarch64-apple-ios-sim/debug"
+    mkdir -p "$out"
+    : > "$out/libaurorality_core.a"
     ;;
 esac
 exit 0
@@ -141,6 +142,26 @@ fn ios_run_builds_rust_for_the_simulator_target() {
     assert!(
         app.join("assets/nested/logo.txt").is_file(),
         "nested file resource not copied"
+    );
+}
+
+#[test]
+fn ios_run_finds_the_rust_library_in_cargo_target_dir() {
+    let fx = fixture();
+    let target = fx.project.parent().unwrap().join("custom-target");
+    let (out, log) = run_ios(&fx, &[("CARGO_TARGET_DIR", target.to_str().unwrap())]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ios_swift = log
+        .lines()
+        .find(|l| l.starts_with("swift build") && l.contains("arm64-apple-ios-simulator"))
+        .unwrap_or_else(|| panic!("no iOS swift build:\n{log}"));
+    assert!(
+        ios_swift.contains(target.to_str().unwrap()),
+        "swift build not linked against CARGO_TARGET_DIR: {ios_swift}"
     );
 }
 

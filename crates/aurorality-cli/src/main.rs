@@ -309,8 +309,11 @@ pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
         );
     }
 
-    let staticlib = ws
-        .join("target")
+    // Cargo writes to CARGO_TARGET_DIR when set (relative paths resolve against `ws`).
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .filter(|d| !d.is_empty())
+        .map_or_else(|| ws.join("target"), |d| ws.join(d));
+    let staticlib = target_dir
         .join(IOS_SIM_RUST_TARGET)
         .join("debug/libaurorality_core.a");
     if !staticlib.is_file() {
@@ -319,10 +322,7 @@ pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
             staticlib.display()
         );
     }
-    let link_dir = ws
-        .join("target")
-        .join(IOS_SIM_RUST_TARGET)
-        .join("aurorality-link");
+    let link_dir = target_dir.join(IOS_SIM_RUST_TARGET).join("aurorality-link");
     std::fs::create_dir_all(&link_dir)?;
     std::fs::copy(&staticlib, link_dir.join("libaurorality_core.a"))?;
     Ok(std::path::absolute(&link_dir)?)

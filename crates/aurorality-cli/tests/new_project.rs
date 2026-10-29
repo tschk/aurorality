@@ -143,4 +143,22 @@ fn new_project_uses_an_explicit_checkout_and_escapes_the_name() {
     );
     let app = std::fs::read_to_string(root.join("Sources/App.swift")).unwrap();
     assert!(app.contains(r#".string("Hello from say\"hi")"#), "{app}");
+
+    // The printed next-step command must work in a shell for this name.
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let hint = stdout
+        .lines()
+        .find_map(|l| l.trim().strip_suffix(" && aurorality run"))
+        .unwrap_or_else(|| panic!("no cd hint in: {stdout}"));
+    let pwd = Command::new("sh")
+        .arg("-c")
+        .arg(format!("{hint} && pwd -P"))
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(pwd.status.success(), "hint `{hint}` failed in sh");
+    assert_eq!(
+        String::from_utf8_lossy(&pwd.stdout).trim(),
+        root.canonicalize().unwrap().to_str().unwrap()
+    );
 }
