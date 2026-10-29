@@ -81,6 +81,10 @@ fn new_project_is_a_swift_package_wired_to_aurorality() {
         cmds.iter().all(|c| !c.contains("../aurorality")),
         "{cmds:?}"
     );
+    assert_eq!(
+        brisk["aurorality"]["path"].as_str(),
+        Some(aur.to_str().unwrap())
+    );
 }
 
 #[test]
@@ -94,4 +98,42 @@ fn new_project_rejects_a_path_that_is_not_an_aurorality_checkout() {
         .unwrap();
     assert!(!out.status.success());
     assert!(!dir.path().join("demo").exists());
+}
+
+#[test]
+fn new_project_uses_an_explicit_checkout_and_escapes_the_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let checkout = dir.path().join("my aurorality");
+    std::fs::create_dir_all(checkout.join("crates/aurorality-core")).unwrap();
+    std::fs::write(checkout.join("Package.swift"), "").unwrap();
+    std::fs::write(checkout.join("crates/aurorality-core/Cargo.toml"), "").unwrap();
+    let checkout = checkout.canonicalize().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args(["new", "say\"hi", "--aurorality"])
+        .arg(&checkout)
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let root = dir.path().join("say\"hi");
+    let package = std::fs::read_to_string(root.join("Package.swift")).unwrap();
+    assert!(
+        package.contains(&format!(
+            ".package(name: \"Aurorality\", path: \"{}\")",
+            checkout.display()
+        )),
+        "{package}"
+    );
+    let brisk: toml::Value =
+        toml::from_str(&std::fs::read_to_string(root.join(".brisk.toml")).unwrap()).unwrap();
+    assert_eq!(
+        brisk["aurorality"]["path"].as_str(),
+        Some(checkout.to_str().unwrap())
+    );
+    let app = std::fs::read_to_string(root.join("Sources/App.swift")).unwrap();
+    assert!(app.contains(r#".string("Hello from say\"hi")"#), "{app}");
 }

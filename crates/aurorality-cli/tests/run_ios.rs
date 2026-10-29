@@ -73,7 +73,7 @@ fn fixture() -> Fixture {
     std::fs::write(project.join("assets/nested/logo.txt"), "x").unwrap();
     std::fs::write(
         project.join(".brisk.toml"),
-        "[package]\nname = \"Demo\"\n\n[app]\nbundle_id = \"dev.test.demo\"\nresources = [\"assets/nested/logo.txt\"]\n",
+        "[package]\nname = \"Demo\"\n\n[aurorality]\npath = \".\"\n\n[app]\nbundle_id = \"dev.test.demo\"\nresources = [\"assets/nested/logo.txt\"]\n",
     )
     .unwrap();
     std::fs::write(

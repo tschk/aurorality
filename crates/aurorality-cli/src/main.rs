@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         Commands::Run { project, ios } => {
             pre_build()?;
             if ios {
-                let rust_lib_dir = pre_build_ios()?;
+                let rust_lib_dir = pre_build_ios(&project)?;
                 build_swift::build_and_launch_ios(&project, &rust_lib_dir)?;
             } else {
                 build_swift::build_and_launch(&project, None)?;
@@ -271,8 +271,8 @@ pub const IOS_SIM_RUST_TARGET: &str = "aarch64-apple-ios-sim";
 /// Build `aurorality-core` for the iOS Simulator and return a directory that
 /// contains only the static library, so the Swift link step cannot fall back
 /// to the host (macOS) build or to a dylib the app bundle does not embed.
-pub fn pre_build_ios() -> Result<PathBuf> {
-    let ws = find_workspace_root();
+pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
+    let ws = aurorality_checkout(project)?;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     println!("building aurorality-core for {IOS_SIM_RUST_TARGET}...");
@@ -314,6 +314,33 @@ pub fn pre_build_ios() -> Result<PathBuf> {
     std::fs::create_dir_all(&link_dir)?;
     std::fs::copy(&staticlib, link_dir.join("libaurorality_core.a"))?;
     Ok(std::path::absolute(&link_dir)?)
+}
+
+/// The aurorality checkout whose Rust core the project links: `[aurorality].path`
+/// in the project's `crepus.toml` / `.brisk.toml` (written by `aurorality new`),
+/// else the enclosing Cargo workspace if it contains `aurorality-core`.
+fn aurorality_checkout(project: &Path) -> Result<PathBuf> {
+    for file in ["crepus.toml", ".brisk.toml"] {
+        let Ok(raw) = std::fs::read_to_string(project.join(file)) else {
+            continue;
+        };
+        let value: toml::Value = toml::from_str(&raw)?;
+        if let Some(path) = value
+            .get("aurorality")
+            .and_then(|a| a.get("path"))
+            .and_then(|p| p.as_str())
+        {
+            return Ok(project.join(path));
+        }
+    }
+    let ws = find_workspace_root();
+    if ws.join("crates/aurorality-core/Cargo.toml").is_file() {
+        return Ok(ws);
+    }
+    anyhow::bail!(
+        "cannot find the aurorality checkout for {}: set [aurorality] path in .brisk.toml",
+        project.display()
+    )
 }
 
 fn configured_pre_build_commands() -> Result<Option<Vec<String>>> {

@@ -75,6 +75,8 @@ let package = Package(
         ),
     )?;
 
+    // Swift string literal: Rust's Debug escaping (`"`, `\\`, control chars) is valid Swift.
+    let title = format!("{:?}", format!("Hello from {name}"));
     std::fs::write(
         root.join("Sources/App.swift"),
         format!(
@@ -103,7 +105,7 @@ struct {name_pascal}App: App {{
             try state.load(
                 template: String(contentsOf: url, encoding: .utf8),
                 context: [
-                    "title": .string("Hello from {name}"),
+                    "title": .string({title}),
                     "subtitle": .string("Edit views/main.crepus to get started"),
                 ])
         }} catch {{
@@ -136,6 +138,7 @@ struct {name_pascal}App: App {{
         .collect::<Vec<_>>()
         .join("\n");
 
+    let aur_toml = toml::Value::String(aur_disp.clone());
     std::fs::write(
         root.join(".brisk.toml"),
         format!(
@@ -148,6 +151,9 @@ bundle_id = "com.example.{name_lower}"
 deployment_target = "17.0"
 sources = "Sources"
 resources = ["views"]
+
+[aurorality]
+path = {aur_toml}
 
 [pre_build]
 commands = [
