@@ -28,3 +28,31 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+  swift-hot-reload:
+    name: Swift hot reload (end to end)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build aurorality-core and the CLI
+        run: cargo build --locked -p aurorality-core --features js -p aurorality-cli
+
+      - name: Generate Swift bindings
+        run: |
+          cargo run --locked -p aurorality-core --features js --bin uniffi-bindgen generate \
+            --library target/debug/libaurorality_core.dylib --language swift --out-dir generated
+          cp generated/aurorality_coreFFI.modulemap generated/module.modulemap
+
+      # Runs every Swift test; HotReloadEndToEndTests drives a real `aurorality dev`
+      # server with the real HotReloadClient (devHello, initial IR, patch on save).
+      - name: Swift tests
+        env:
+          AURORALITY_CLI: ${{ github.workspace }}/target/debug/aurorality
+        run: swift test
