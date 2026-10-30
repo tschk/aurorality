@@ -56,17 +56,17 @@ Then run `brisk build` or `brisk run`.
 
 ## Dev overlay + hybrid reload
 
-Set `AURORALITY_DEV=1` and run from the Aurorality repo:
+Run from `examples/hyperchat`:
 
 ```bash
-cargo run -p aurorality-cli -- dev examples/hyperchat/views \
-  --swiftgen-view examples/hyperchat/views/main.crepus \
-  --swiftgen-out examples/hyperchat/Generated \
-  --swiftgen-name HyperChatGeneratedView \
+cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- dev --serve \
+  --swiftgen-view views/main.crepus \
+  --swiftgen-out Generated \
+  --swiftgen-view-name HyperChatGeneratedView \
   --swiftgen-context-type HyperChatContext
 ```
 
-Brisk’s rebuild loop picks up regenerated `HyperChatGeneratedView.swift`; the overlay shows swiftgen/IR status immediately.
+The dev loop rebuilds the SwiftPM app when `HyperChatGeneratedView.swift` changes. The overlay shows swiftgen and IR status.
 
 ## Persistence
 

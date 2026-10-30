@@ -170,7 +170,7 @@ Each example demonstrates the three backend styles together:
 
 `aurorality run --ios` builds `aurorality-core` for `aarch64-apple-ios-sim` (install it with `rustup target add aarch64-apple-ios-sim`), links the Swift build against that static library via `AURORALITY_RUST_LIB_DIR`, wraps the binary in an iOS `.app`, and installs and launches it with `simctl`. Any failed step exits non-zero.
 
-The Rust library is looked up in `CARGO_TARGET_DIR` when that variable is set (a relative path resolves against the aurorality checkout), otherwise in the checkout's `target/`. A `build.target-dir` set in `.cargo/config.toml` is **not** read; if you use one, also export `CARGO_TARGET_DIR` with the same path.
+The Rust library is looked up in `CARGO_TARGET_DIR` when that variable is set, otherwise in the checkout's `target/`. A relative `CARGO_TARGET_DIR` resolves against the project directory for both host and simulator builds. A `build.target-dir` set in `.cargo/config.toml` is **not** read; if you use one, also export `CARGO_TARGET_DIR` with the same path. Projects created before this change need their generated pre-build commands updated to use `CARGO_TARGET_DIR` for the host library.
 
 ## Hot Reload
 
@@ -191,7 +191,9 @@ A template save needs no rebuild while such an app is running. Swift changes, an
 
 ### `dev --serve`: WebSocket server
 
-`aurorality dev --serve` also serves hot reload on `ws://127.0.0.1:47832` (`--port`), and passes `AURORALITY_DEV_PORT` to the launched app. Use it for `HotReloadClient` consumers: the Runner preview app, `AurorDevOverlay`, and real devices.
+`aurorality dev --serve` also serves hot reload on `ws://127.0.0.1:47832` (`--port`), and passes `AURORALITY_DEV_PORT` to the launched app. Use it for `HotReloadClient` consumers: the Runner preview app and `AurorDevOverlay`.
+
+For a real device, run `aurorality dev --serve --host 0.0.0.0` and connect the client to the Mac's LAN address and the selected port. The server has no authentication or encryption and exposes template contents and project paths to clients. Use a trusted network and firewall, and stop the server when finished. The default remains loopback-only.
 
 1. **`DevHello` on connect**: session id, watch dir, optional swiftgen paths. The current template follows as a `fullReload`.
 2. **IR reload / patches**, unless `--no-ir`: each `.crepus` save sends an `IrMutation` patch (`replaceRoot`, `replaceNode`, …), or a full reload when the template's shape changed. **The server renders with an empty context**, so templates that use app context variables show them unresolved. In-process reload doesn't have this problem.

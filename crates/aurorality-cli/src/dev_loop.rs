@@ -22,6 +22,7 @@ use crate::hot_reload::{HotReloadServer, ServerConfig, SwiftgenConfig};
 /// `dev --serve`: also run the WebSocket hot-reload server.
 pub struct Serve {
     pub port: u16,
+    pub host: std::net::IpAddr,
     pub ir_enabled: bool,
     pub swiftgen: Option<SwiftgenConfig>,
 }
@@ -40,7 +41,14 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     // Register the watcher before serving or building, so a save made as soon as
     // a client connects (or during the first build) is not lost.
     let cfg = build_swift::read_config(&cwd).ok();
-    let watched_sources = watched_source_dirs(&cwd, cfg.as_ref());
+    let mut watched_sources = watched_source_dirs(&cwd, cfg.as_ref());
+    if let Some(swiftgen) = serve.as_ref().and_then(|s| s.swiftgen.as_ref()) {
+        let out = cwd.join(&swiftgen.out);
+        std::fs::create_dir_all(&out)?;
+        if !watched_sources.contains(&out) {
+            watched_sources.push(out);
+        }
+    }
     let watched_resources = watched_resource_dirs(&cwd, &watch_views, cfg.as_ref());
     println!(
         "{} watching {} — edit to rebuild",
@@ -82,9 +90,10 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     let server = match &serve {
         Some(s) => {
             let port = s.port;
-            let listener = std::net::TcpListener::bind(("127.0.0.1", port))
-                .map_err(|e| anyhow::anyhow!("hot-reload server: bind 127.0.0.1:{port}: {e}"))?;
-            println!("hot reload on ws://127.0.0.1:{port}");
+            let address = std::net::SocketAddr::new(s.host, port);
+            let listener = std::net::TcpListener::bind(address)
+                .map_err(|e| anyhow::anyhow!("hot-reload server: bind {address}: {e}"))?;
+            println!("hot reload on ws://{}", listener.local_addr()?);
             Some(HotReloadServer::start(
                 listener,
                 ServerConfig {
@@ -106,7 +115,7 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     };
 
     // Pre-build Rust + bindings (only once)
-    crate::pre_build().map_err(|e| anyhow::anyhow!("pre-build failed: {e}"))?;
+    crate::pre_build(&cwd).map_err(|e| anyhow::anyhow!("pre-build failed: {e}"))?;
 
     let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -122,7 +131,7 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     // Initial build + launch
     {
         let mut child = child.lock().unwrap();
-        *child = build_and_launch_app(&cwd, &launch);
+        *child = Some(build_and_launch_app(&cwd, &launch)?);
     }
 
     loop {
@@ -155,14 +164,11 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
                     {
                         server.template_changed(p);
                     }
-                    // With --no-ir the server pushes no template updates.
-                    let ir = serve.as_ref().is_some_and(|s| s.ir_enabled);
-                    if templates_only && ir && server.client_count() > 0 {
+                    if templates_only && serve.as_ref().is_some_and(|s| s.ir_enabled) {
                         println!(
                             "  pushed template update to {} client(s)",
                             server.client_count()
                         );
-                        handled = true;
                     }
                 }
                 if templates_only && launch.marker.exists() && app_running(&child) {
@@ -177,7 +183,13 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
 
                 // Rebuild + relaunch
                 let mut new = child.lock().unwrap();
-                *new = build_and_launch_app(&cwd, &launch);
+                *new = match build_and_launch_app(&cwd, &launch) {
+                    Ok(child) => Some(child),
+                    Err(e) => {
+                        eprintln!("  {e:#}");
+                        None
+                    }
+                };
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
@@ -197,14 +209,14 @@ fn app_running(child: &Arc<Mutex<Option<Child>>>) -> bool {
         .unwrap_or(false)
 }
 
-fn build_and_launch_app(project_root: &Path, launch: &Launch) -> Option<Child> {
+fn build_and_launch_app(project_root: &Path, launch: &Launch) -> anyhow::Result<Child> {
     let swift = crate::find_swift();
     let t0 = Instant::now();
 
-    let status = Command::new(&swift)
-        .arg("build")
-        .current_dir(project_root)
-        .status();
+    let mut build = Command::new(&swift);
+    build.arg("build").current_dir(project_root);
+    build_swift::set_host_rust_lib_dir(&mut build, project_root)?;
+    let status = build.status();
 
     match status {
         Ok(s) if s.success() => {
@@ -226,22 +238,10 @@ fn build_and_launch_app(project_root: &Path, launch: &Launch) -> Option<Child> {
             if let Some(port) = launch.port {
                 env.push(("AURORALITY_DEV_PORT", port.to_string()));
             }
-            match build_swift::build_and_launch_spawn(project_root, &env) {
-                Ok(child) => Some(child),
-                Err(e) => {
-                    eprintln!("  launch failed: {e}");
-                    None
-                }
-            }
+            build_swift::build_and_launch_spawn(project_root, &env)
         }
-        Ok(s) => {
-            eprintln!("  build failed ({})", s.code().unwrap_or(1));
-            None
-        }
-        Err(e) => {
-            eprintln!("  swift build error: {e}");
-            None
-        }
+        Ok(s) => anyhow::bail!("swift build failed ({})", s.code().unwrap_or(1)),
+        Err(e) => Err(anyhow::anyhow!("swift build: {e}")),
     }
 }
 

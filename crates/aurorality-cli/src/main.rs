@@ -35,8 +35,7 @@ enum Commands {
     /// (`AurorState.watchLiveTemplate`). Swift changes, and template saves for
     /// apps that do not watch, kill the app, rebuild, and relaunch it.
     ///
-    /// `--serve` also runs the WebSocket server (ws://127.0.0.1:<port>) for
-    /// `HotReloadClient`: the Runner, `aurorDevOverlay`, and real devices.
+    /// `--serve` also runs the WebSocket server for `HotReloadClient`.
     Dev {
         /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
@@ -47,6 +46,9 @@ enum Commands {
         /// WebSocket port for `--serve` (default 47832).
         #[arg(long, requires = "serve")]
         port: Option<u16>,
+        /// Address to bind for `--serve` (default 127.0.0.1).
+        #[arg(long, requires = "serve", default_value = "127.0.0.1")]
+        host: std::net::IpAddr,
         /// With `--serve`: do not send IR patches (swiftgen status only).
         #[arg(long, requires = "serve")]
         no_ir: bool,
@@ -134,6 +136,7 @@ fn main() -> Result<()> {
             watch,
             serve,
             port,
+            host,
             no_ir,
             swiftgen_view,
             swiftgen_out,
@@ -151,13 +154,14 @@ fn main() -> Result<()> {
                     });
             let serve = serve.then(|| dev_loop::Serve {
                 port: port.unwrap_or(hot_reload::DEFAULT_PORT),
+                host,
                 ir_enabled: !no_ir,
                 swiftgen,
             });
             dev_loop::run(watch, serve)?;
         }
         Commands::Run { project, ios } => {
-            pre_build()?;
+            pre_build(&project)?;
             if ios {
                 let rust_lib_dir = pre_build_ios(&project)?;
                 build_swift::build_and_launch_ios(&project, &rust_lib_dir)?;
@@ -202,24 +206,36 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-pub fn find_workspace_root() -> PathBuf {
-    let mut dir = std::env::current_dir().unwrap_or_default();
+fn find_workspace_root_from(project: &Path) -> PathBuf {
+    let project = std::path::absolute(project).unwrap_or_else(|_| project.to_path_buf());
+    let mut dir = project.clone();
     loop {
         if dir.join("Cargo.toml").exists() && dir.join("Cargo.lock").exists() {
             return dir;
         }
         if !dir.pop() {
-            return PathBuf::from(".");
+            return project;
         }
     }
 }
 
-pub fn pre_build() -> Result<()> {
-    if let Some(commands) = configured_pre_build_commands()? {
+fn configured_target_dir(project: &Path) -> Result<Option<PathBuf>> {
+    std::env::var_os("CARGO_TARGET_DIR")
+        .filter(|d| !d.is_empty())
+        .map(|d| std::path::absolute(project.join(d)).map_err(Into::into))
+        .transpose()
+}
+
+pub fn pre_build(project: &Path) -> Result<()> {
+    let configured_target = configured_target_dir(project)?;
+    if let Some(commands) = configured_pre_build_commands(project)? {
         for command in commands {
-            let status = Command::new("sh")
-                .arg("-c")
-                .arg(&command)
+            let mut cmd = Command::new("sh");
+            cmd.arg("-c").arg(&command).current_dir(project);
+            if let Some(target) = &configured_target {
+                cmd.env("CARGO_TARGET_DIR", target);
+            }
+            let status = cmd
                 .status()
                 .map_err(|e| anyhow::anyhow!("pre-build command `{command}`: {e}"))?;
             if !status.success() {
@@ -233,19 +249,21 @@ pub fn pre_build() -> Result<()> {
         return Ok(());
     }
 
-    let ws = find_workspace_root();
+    let ws = find_workspace_root_from(project);
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let target_dir = configured_target.unwrap_or_else(|| ws.join("target"));
 
     let status = Command::new(&cargo)
         .args(["build", "-p", "aurorality-core", "--features", "js"])
         .current_dir(&ws)
+        .env("CARGO_TARGET_DIR", &target_dir)
         .status()
         .map_err(|e| anyhow::anyhow!("cargo build: {e}"))?;
     if !status.success() {
         anyhow::bail!("cargo build failed ({})", status.code().unwrap_or(1));
     }
 
-    let dylib = ws.join("target/debug/libaurorality_core.dylib");
+    let dylib = target_dir.join("debug/libaurorality_core.dylib");
     let generated = ws.join("generated");
     let status = Command::new(&cargo)
         .args([
@@ -263,6 +281,7 @@ pub fn pre_build() -> Result<()> {
         .args(["--language", "swift", "--out-dir"])
         .arg(&generated)
         .current_dir(&ws)
+        .env("CARGO_TARGET_DIR", &target_dir)
         .status()
         .map_err(|e| anyhow::anyhow!("uniffi-bindgen: {e}"))?;
     if !status.success() {
@@ -286,6 +305,7 @@ pub const IOS_SIM_RUST_TARGET: &str = "aarch64-apple-ios-sim";
 pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
     let ws = aurorality_checkout(project)?;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let target_dir = configured_target_dir(project)?.unwrap_or_else(|| ws.join("target"));
 
     println!("building aurorality-core for {IOS_SIM_RUST_TARGET}...");
     let status = Command::new(&cargo)
@@ -299,6 +319,7 @@ pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
             IOS_SIM_RUST_TARGET,
         ])
         .current_dir(&ws)
+        .env("CARGO_TARGET_DIR", &target_dir)
         .status()
         .map_err(|e| anyhow::anyhow!("cargo build --target {IOS_SIM_RUST_TARGET}: {e}"))?;
     if !status.success() {
@@ -309,10 +330,6 @@ pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
         );
     }
 
-    // Cargo writes to CARGO_TARGET_DIR when set (relative paths resolve against `ws`).
-    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
-        .filter(|d| !d.is_empty())
-        .map_or_else(|| ws.join("target"), |d| ws.join(d));
     let staticlib = target_dir
         .join(IOS_SIM_RUST_TARGET)
         .join("debug/libaurorality_core.a");
@@ -342,10 +359,10 @@ fn aurorality_checkout(project: &Path) -> Result<PathBuf> {
             .and_then(|a| a.get("path"))
             .and_then(|p| p.as_str())
         {
-            return Ok(project.join(path));
+            return Ok(std::path::absolute(project.join(path))?);
         }
     }
-    let ws = find_workspace_root();
+    let ws = find_workspace_root_from(project);
     if ws.join("crates/aurorality-core/Cargo.toml").is_file() {
         return Ok(ws);
     }
@@ -355,9 +372,9 @@ fn aurorality_checkout(project: &Path) -> Result<PathBuf> {
     )
 }
 
-fn configured_pre_build_commands() -> Result<Option<Vec<String>>> {
+fn configured_pre_build_commands(project: &Path) -> Result<Option<Vec<String>>> {
     for file in ["crepus.toml", ".brisk.toml"] {
-        let path = PathBuf::from(file);
+        let path = project.join(file);
         if path.is_file() {
             let commands = read_pre_build_commands(&path)?;
             if !commands.is_empty() {

@@ -366,7 +366,7 @@ pub fn build_and_launch_spawn(project_root: &Path, env: &[(&str, String)]) -> Re
         &cfg.resources,
     )?;
 
-    let mut cmd = Command::new(app_dir.join("Contents").join("MacOS").join(&bin_name));
+    let mut cmd = Command::new(app_dir.join("Contents").join("MacOS").join(&cfg.name));
     // AURORALITY_DEV turns on the dev overlay, which connects to the WebSocket
     // server; only `dev --serve` (which passes a port) runs one.
     if env.iter().any(|(k, _)| *k == "AURORALITY_DEV_PORT") {
@@ -384,9 +384,10 @@ pub fn build_and_launch(project_root: &Path, dev_port: Option<u16>) -> Result<()
 
     // 1. Build via swift
     println!("building {}...", cfg.name);
-    let status = Command::new(&swift)
-        .arg("build")
-        .current_dir(project_root)
+    let mut build = Command::new(&swift);
+    build.arg("build").current_dir(project_root);
+    set_host_rust_lib_dir(&mut build, project_root)?;
+    let status = build
         .status()
         .map_err(|e| anyhow::anyhow!("swift build: {e}"))?;
     if !status.success() {
@@ -414,9 +415,16 @@ pub fn build_and_launch(project_root: &Path, dev_port: Option<u16>) -> Result<()
         cmd.env("AURORALITY_DEV", "1")
             .env("AURORALITY_DEV_PORT", p.to_string());
     }
-    cmd.spawn().map_err(|e| anyhow::anyhow!("open: {e}"))?;
+    run_checked(&mut cmd, "open")?;
 
     println!("app launched  →  use `aurorality dev` in another terminal for hot reload");
+    Ok(())
+}
+
+pub fn set_host_rust_lib_dir(cmd: &mut Command, project_root: &Path) -> Result<()> {
+    if let Some(dir) = crate::configured_target_dir(project_root)? {
+        cmd.env("AURORALITY_RUST_LIB_DIR", dir.join("debug"));
+    }
     Ok(())
 }
 
