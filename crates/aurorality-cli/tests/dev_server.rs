@@ -21,10 +21,10 @@ fn dev_serves_hot_reload_over_websocket() {
     let project = dir.path().join("proj");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::create_dir_all(project.join("views")).unwrap();
-    // Fake toolchain: Rust pre-build succeeds, the Swift build fails, so no app launches.
+    // Fake toolchain: the app stays alive while the WebSocket is exercised.
     for (name, body) in [
         ("cargo", "#!/bin/sh\nexit 0\n"),
-        ("swift", "#!/bin/sh\nexit 1\n"),
+        ("swift", "#!/bin/sh\nmkdir -p .build/debug\nprintf '#!/bin/sh\nexec sleep 30\n' > .build/debug/AurorDevWsFixtureQ7\nchmod +x .build/debug/AurorDevWsFixtureQ7\n"),
     ] {
         let p = bin.join(name);
         std::fs::write(&p, body).unwrap();

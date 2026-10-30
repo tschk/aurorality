@@ -37,7 +37,7 @@ fn launches(log: &Path) -> Vec<String> {
 
 /// Runs `aurorality dev` on a fake project whose "app" logs its environment and,
 /// when `announce` is set, creates the live marker like `watchLiveTemplate`.
-fn run(announce: bool) -> Vec<String> {
+fn run(announce: bool, observer: bool) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     let project = dir.path().join("proj");
@@ -68,12 +68,24 @@ fn run(announce: bool) -> Vec<String> {
         "let package = Package(\n    name: \"LiveFixture\",\n)\n",
     )
     .unwrap();
+    std::fs::write(
+        project.join(".brisk.toml"),
+        "[package]\nname = \"FixtureApp\"\n",
+    )
+    .unwrap();
     let template = project.join("views/main.crepus");
     std::fs::write(&template, "span\n  \"one\"\n").unwrap();
 
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aurorality"));
+    command.arg("dev");
+    if observer {
+        command.args(["--serve", "--port", &port.to_string()]);
+    }
     let _dev = KillOnDrop(
-        Command::new(env!("CARGO_BIN_EXE_aurorality"))
-            .arg("dev")
+        command
             .current_dir(&project)
             .env("CARGO", bin.join("cargo"))
             .env("SWIFT_PATH", bin.join("swift"))
@@ -84,13 +96,22 @@ fn run(announce: bool) -> Vec<String> {
             .unwrap(),
     );
     assert!(wait_until(Duration::from_secs(20), || launches(&log).len() == 1));
+    let _observer = if observer {
+        Some(
+            tungstenite::connect(format!("ws://127.0.0.1:{port}"))
+                .unwrap()
+                .0,
+        )
+    } else {
+        None
+    };
     std::thread::sleep(Duration::from_millis(500));
     std::fs::write(&template, "span\n  \"two\"\n").unwrap();
     // Debounce is 300 ms; give a relaunch ample time to happen if it is going to.
     wait_until(Duration::from_secs(4), || launches(&log).len() > 1);
     assert!(
         project
-            .join(".build/LiveFixture.app/Contents/Resources/LiveFixture_LiveFixture.bundle/main.crepus")
+            .join(".build/FixtureApp.app/Contents/Resources/LiveFixture_LiveFixture.bundle/main.crepus")
             .is_file(),
         "SwiftPM resource bundle missing from the macOS app (Bundle.module would trap)"
     );
@@ -102,7 +123,7 @@ fn run(announce: bool) -> Vec<String> {
 
 #[test]
 fn watching_app_is_not_relaunched_on_template_save_and_no_port_is_used() {
-    let launches = run(true);
+    let launches = run(true, false);
     assert_eq!(launches.len(), 1, "{launches:?}");
     // No server, so the dev overlay (which would connect to one) stays off.
     assert!(
@@ -117,6 +138,12 @@ fn watching_app_is_not_relaunched_on_template_save_and_no_port_is_used() {
 
 #[test]
 fn app_that_does_not_watch_is_rebuilt_on_template_save() {
-    let launches = run(false);
+    let launches = run(false, false);
+    assert_eq!(launches.len(), 2, "{launches:?}");
+}
+
+#[test]
+fn unrelated_websocket_client_does_not_prevent_relaunch() {
+    let launches = run(false, true);
     assert_eq!(launches.len(), 2, "{launches:?}");
 }
