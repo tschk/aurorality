@@ -36,49 +36,69 @@ fn context_from_json(json: &str) -> Result<TemplateContext, AurorError> {
 
     let mut ctx = TemplateContext::new();
     for (k, v) in obj {
-        if let Some(tv) = json_value_to_template_value(v) {
-            ctx.vars.insert(k, tv);
-        }
+        let path = field_path("$", &k);
+        ctx.vars.insert(k, json_value_to_template_value(v, &path)?);
     }
     Ok(ctx)
 }
 
+fn field_path(parent: &str, key: &str) -> String {
+    if !key.is_empty()
+        && key
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        format!("{parent}.{key}")
+    } else {
+        format!("{parent}[{}]", serde_json::to_string(key).unwrap())
+    }
+}
+
 /// Convert a JSON value to a TemplateValue.
 /// Arrays of objects become `List(Vec<TemplateContext>)` — each object's
-/// fields become that context's variables.  Arrays of primitives and nested
-/// objects are not supported by the template engine; they are silently dropped.
-fn json_value_to_template_value(v: Value) -> Option<TemplateValue> {
+/// fields become that context's variables. Nested objects and non-object array
+/// elements are not supported by the template engine.
+fn json_value_to_template_value(v: Value, path: &str) -> Result<TemplateValue, AurorError> {
     match v {
-        Value::Bool(b) => Some(TemplateValue::Bool(b)),
+        Value::Bool(b) => Ok(TemplateValue::Bool(b)),
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
-                Some(TemplateValue::Int(i))
+                Ok(TemplateValue::Int(i))
             } else {
-                n.as_f64().map(TemplateValue::Float)
+                n.as_f64()
+                    .map(TemplateValue::Float)
+                    .ok_or_else(|| AurorError::InvalidContext {
+                        message: format!("{path}: number cannot be represented"),
+                    })
             }
         }
-        Value::String(s) => Some(TemplateValue::Str(s)),
+        Value::String(s) => Ok(TemplateValue::Str(s)),
         Value::Array(arr) => {
-            let contexts: Vec<TemplateContext> = arr
-                .into_iter()
-                .filter_map(|item| {
-                    if let Value::Object(obj) = item {
-                        let mut child = TemplateContext::new();
-                        for (k, v) in obj {
-                            if let Some(tv) = json_value_to_template_value(v) {
-                                child.vars.insert(k, tv);
-                            }
-                        }
-                        Some(child)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            Some(TemplateValue::List(contexts))
+            let mut contexts = Vec::with_capacity(arr.len());
+            for (index, item) in arr.into_iter().enumerate() {
+                let item_path = format!("{path}[{index}]");
+                let Value::Object(obj) = item else {
+                    return Err(AurorError::InvalidContext {
+                        message: format!("{item_path}: array elements must be objects"),
+                    });
+                };
+                let mut child = TemplateContext::new();
+                for (k, v) in obj {
+                    let child_path = field_path(&item_path, &k);
+                    child
+                        .vars
+                        .insert(k, json_value_to_template_value(v, &child_path)?);
+                }
+                contexts.push(child);
+            }
+            Ok(TemplateValue::List(contexts))
         }
-        Value::Null => Some(TemplateValue::Null),
-        Value::Object(_) => None, // nested objects not supported as standalone values
+        Value::Null => Ok(TemplateValue::Null),
+        Value::Object(_) => Err(AurorError::InvalidContext {
+            message: format!("{path}: nested objects are not supported"),
+        }),
     }
 }
 
@@ -100,9 +120,8 @@ mod tests {
             "float": 2.5,
             "string": "hello",
             "null": null,
-            "array": [{"a": 1}, {"b": 2}],
-            "ignored_nested_obj": {"x": 1},
-            "array_of_primitives": [1, 2]
+            "array": [{"a": 1, "children": [{"name": "child"}]}, {"b": 2}],
+            "empty": []
         }"#;
 
         let ctx = context_from_json(json).unwrap();
@@ -132,18 +151,42 @@ mod tests {
             assert_eq!(list.len(), 2);
             assert!(matches!(list[0].vars.get("a"), Some(TemplateValue::Int(1))));
             assert!(matches!(list[1].vars.get("b"), Some(TemplateValue::Int(2))));
+            assert!(
+                matches!(list[0].vars.get("children"), Some(TemplateValue::List(children)) if matches!(children[0].vars.get("name"), Some(TemplateValue::Str(name)) if name == "child"))
+            );
         } else {
             panic!("Expected List");
         }
 
-        // ignored_nested_obj
-        assert!(!ctx.vars.contains_key("ignored_nested_obj"));
+        assert!(
+            matches!(ctx.vars.get("empty"), Some(TemplateValue::List(list)) if list.is_empty())
+        );
+    }
 
-        // array_of_primitives: primitives in arrays are ignored (filter_map skips them)
-        if let Some(TemplateValue::List(list)) = ctx.vars.get("array_of_primitives") {
-            assert_eq!(list.len(), 0);
-        } else {
-            panic!("Expected empty List for array of primitives");
+    #[test]
+    fn rejects_unsupported_values_with_paths() {
+        for (json, path, reason) in [
+            (r#"{"user":{"name":"Ada"}}"#, "$.user", "nested objects"),
+            (r#"{"items":[{}, 1]}"#, "$.items[1]", "array elements"),
+            (
+                r#"{"items":[{"child":{"x":1}}]}"#,
+                "$.items[0].child",
+                "nested objects",
+            ),
+            (
+                r#"{"items":[{"children":[{}, null]}]}"#,
+                "$.items[0].children[1]",
+                "array elements",
+            ),
+            (r#"{"a.b":[[]]}"#, "$[\"a.b\"][0]", "array elements"),
+        ] {
+            match render("", json).unwrap_err() {
+                AurorError::InvalidContext { message } => {
+                    assert!(message.contains(path), "{message}");
+                    assert!(message.contains(reason), "{message}");
+                }
+                other => panic!("Expected InvalidContext, got {other:?}"),
+            }
         }
     }
 
