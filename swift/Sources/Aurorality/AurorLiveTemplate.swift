@@ -53,10 +53,10 @@ extension AurorState {
                 self.error = "\(error)"
             }
         }
-        // Tell `aurorality dev` this app reloads templates itself, so a
-        // template save does not trigger a rebuild and relaunch.
+        // Announce the exact paths this app reloads itself.
         if let marker = ProcessInfo.processInfo.environment["AURORALITY_LIVE_MARKER"] {
-            FileManager.default.createFile(atPath: marker, contents: nil)
+            let paths = liveWatchers.keys.compactMap { AurorTemplates.liveURL($0)?.standardizedFileURL.path }
+            try? paths.joined(separator: "\n").write(toFile: marker, atomically: true, encoding: .utf8)
         }
         return true
     }

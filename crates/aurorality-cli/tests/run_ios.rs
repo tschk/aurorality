@@ -247,3 +247,45 @@ fn ios_run_stops_when_ios_rust_build_fails() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("aarch64-apple-ios-sim"), "{stderr}");
 }
+
+#[test]
+fn run_uses_the_given_projects_pre_build_and_working_directory() {
+    let fx = fixture();
+    std::fs::write(
+        fx.project.join(".brisk.toml"),
+        "[package]\nname = \"Demo\"\n[pre_build]\ncommands = [\"test -f Package.swift && echo PROJECT_PREBUILD && exit 9\"]\n",
+    ).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args(["run", "--ios"])
+        .arg(&fx.project)
+        .current_dir(fx.project.parent().unwrap())
+        .env("CARGO", fx.bin.join("cargo"))
+        .env("FAKE_LOG", &fx.log)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("PROJECT_PREBUILD"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("failed (9)"));
+}
+
+#[test]
+fn macos_run_fails_when_open_fails() {
+    let fx = fixture();
+    write_exe(
+        &fx.bin.join("open"),
+        "#!/bin/sh\necho open_failed >&2\nexit 19\n",
+    );
+    let out = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .arg("run")
+        .arg(&fx.project)
+        .current_dir(fx.project.parent().unwrap())
+        .env("PATH", format!("{}:/usr/bin:/bin", fx.bin.display()))
+        .env("CARGO", fx.bin.join("cargo"))
+        .env("SWIFT_PATH", fx.bin.join("swift"))
+        .env("FAKE_LOG", &fx.log)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("open failed (19)"));
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("app launched"));
+}

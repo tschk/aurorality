@@ -15,16 +15,48 @@ impl Drop for KillOnDrop {
 }
 
 #[test]
+fn non_loopback_listener_requires_a_token() {
+    let project = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args([
+            "dev",
+            "--serve",
+            "--host",
+            "0.0.0.0",
+            "--insecure-cleartext",
+        ])
+        .current_dir(project.path())
+        .env_remove("AURORALITY_DEV_TOKEN")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("AURORALITY_DEV_TOKEN"));
+}
+
+#[test]
+fn non_loopback_listener_refuses_cleartext_without_opt_in() {
+    let project = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args(["dev", "--serve", "--host", "0.0.0.0"])
+        .current_dir(project.path())
+        .env("AURORALITY_DEV_TOKEN", "test-secret")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--insecure-cleartext"));
+}
+
+#[test]
 fn dev_serves_hot_reload_over_websocket() {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     let project = dir.path().join("proj");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::create_dir_all(project.join("views")).unwrap();
-    // Fake toolchain: Rust pre-build succeeds, the Swift build fails, so no app launches.
+    // Fake toolchain: the app stays alive while the WebSocket is exercised.
     for (name, body) in [
         ("cargo", "#!/bin/sh\nexit 0\n"),
-        ("swift", "#!/bin/sh\nexit 1\n"),
+        ("swift", "#!/bin/sh\nmkdir -p .build/debug\nprintf '#!/bin/sh\nexec sleep 30\n' > .build/debug/AurorDevWsFixtureQ7\nchmod +x .build/debug/AurorDevWsFixtureQ7\n"),
     ] {
         let p = bin.join(name);
         std::fs::write(&p, body).unwrap();

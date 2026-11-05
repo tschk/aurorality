@@ -162,3 +162,73 @@ fn new_project_uses_an_explicit_checkout_and_escapes_the_name() {
         root.canonicalize().unwrap().to_str().unwrap()
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn scaffolded_ios_prebuild_uses_the_project_relative_target_directory() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let checkout = dir.path().join("checkout with spaces");
+    let bin = dir.path().join("bin");
+    std::fs::create_dir_all(checkout.join("crates/aurorality-core")).unwrap();
+    std::fs::create_dir_all(checkout.join("generated")).unwrap();
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(checkout.join("Package.swift"), "").unwrap();
+    std::fs::write(checkout.join("crates/aurorality-core/Cargo.toml"), "").unwrap();
+    let cargo = bin.join("cargo");
+    std::fs::write(
+        &cargo,
+        r#"#!/bin/sh
+case "$*" in
+  *--target*) echo "IOS_TARGET=$CARGO_TARGET_DIR"; exit 41 ;;
+  *--library*)
+    [ "$(pwd -P)" = "$(cd "$CHECKOUT" && pwd -P)" ] || { echo "wrong bindgen working directory" >&2; exit 43; }
+    while [ "$1" != "--library" ]; do shift; done
+    [ -f "$2" ] || { echo "missing library $2" >&2; exit 42; }
+    : > "$CHECKOUT/generated/aurorality_coreFFI.modulemap"
+    ;;
+  *) mkdir -p "$CARGO_TARGET_DIR/debug"; : > "$CARGO_TARGET_DIR/debug/libaurorality_core.dylib" ;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&cargo, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let cli = env!("CARGO_BIN_EXE_aurorality");
+    let created = Command::new(cli)
+        .args(["new", "demo", "--aurorality"])
+        .arg(&checkout)
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+
+    let out = Command::new(cli)
+        .args(["run", "--ios", "demo"])
+        .current_dir(dir.path())
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("CARGO", &cargo)
+        .env("CARGO_TARGET_DIR", "custom target")
+        .env("CHECKOUT", &checkout)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains(&format!(
+            "IOS_TARGET={}",
+            dir.path()
+                .canonicalize()
+                .unwrap()
+                .join("demo/custom target")
+                .display()
+        )),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("failed (41)"));
+}

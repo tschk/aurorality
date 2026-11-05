@@ -117,12 +117,13 @@ struct {name_pascal}App: App {{
     )?;
 
     let manifest = sh_quote(&format!("{aur_disp}/Cargo.toml"));
-    let dylib = sh_quote(&format!("{aur_disp}/target/debug/libaurorality_core.dylib"));
+    let target = sh_quote(&format!("{aur_disp}/target"));
     let generated = format!("{aur_disp}/generated");
     let commands = [
         format!("cargo build --manifest-path {manifest} -p aurorality-core --features js"),
         format!(
-            "cargo run --manifest-path {manifest} -p aurorality-core --features js --bin uniffi-bindgen generate --library {dylib} --language swift --out-dir {}",
+            "target_dir=${{CARGO_TARGET_DIR:-}}; [ -n \"$target_dir\" ] || target_dir={target}; cd {} && cargo run --manifest-path {manifest} -p aurorality-core --features js --bin uniffi-bindgen generate --library \"$target_dir/debug/libaurorality_core.dylib\" --language swift --out-dir {}",
+            sh_quote(&aur_disp),
             sh_quote(&generated)
         ),
         format!(

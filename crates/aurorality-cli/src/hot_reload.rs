@@ -33,6 +33,7 @@ pub struct ServerConfig {
     pub watch_dir: PathBuf,
     pub ir_enabled: bool,
     pub swiftgen: Option<SwiftgenConfig>,
+    pub token: Option<String>,
 }
 
 pub struct HotReloadServer {
@@ -114,11 +115,25 @@ impl HotReloadServer {
         // Browsers always send `Origin`; native clients (URLSessionWebSocketTask)
         // do not. Rejecting it stops any web page from reading project paths and IR.
         #[allow(clippy::result_large_err)] // signature fixed by tungstenite's `Callback`
-        let reject_browsers = |req: &Request, resp: Response| {
+        let authorize = |req: &Request, resp: Response| {
             if req.headers().contains_key("origin") {
                 let mut deny = ErrorResponse::new(Some("browser origins are not allowed".into()));
                 *deny.status_mut() = tungstenite::http::StatusCode::FORBIDDEN;
                 Err(deny)
+            } else if let Some(token) = &self.cfg.token {
+                let expected = format!("Bearer {token}");
+                if req
+                    .headers()
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    == Some(expected.as_str())
+                {
+                    Ok(resp)
+                } else {
+                    let mut deny = ErrorResponse::new(Some("unauthorized".into()));
+                    *deny.status_mut() = tungstenite::http::StatusCode::UNAUTHORIZED;
+                    Err(deny)
+                }
             } else {
                 Ok(resp)
             }
@@ -126,7 +141,7 @@ impl HotReloadServer {
         let Ok(reader) = stream.try_clone() else {
             return;
         };
-        let Ok(mut ws) = tungstenite::accept_hdr(stream, reject_browsers) else {
+        let Ok(mut ws) = tungstenite::accept_hdr(stream, authorize) else {
             return;
         };
         let swiftgen = self.cfg.swiftgen.as_ref();
@@ -142,13 +157,11 @@ impl HotReloadServer {
         if ws.send(self.envelope(hello)).is_err() {
             return;
         }
+        let templates = self.templates.lock().unwrap();
         if self.cfg.ir_enabled {
-            let current = {
-                let guard = self.templates.lock().unwrap();
-                guard.1.as_ref().and_then(|p| guard.0.get(p)).cloned()
-            };
+            let current = templates.1.as_ref().and_then(|p| templates.0.get(p));
             if let Some(template) = current {
-                let msg = full_reload(&template, "connected");
+                let msg = full_reload(template, "connected");
                 if ws.send(self.envelope(msg)).is_err() {
                     return;
                 }
@@ -156,6 +169,7 @@ impl HotReloadServer {
         }
         let id = self.next_client.fetch_add(1, Ordering::SeqCst);
         self.clients.lock().unwrap().push((id, ws));
+        drop(templates);
         // Clients never send anything we need; read only to notice the close so
         // `client_count` does not keep counting an app that has exited.
         let server = Arc::clone(self);
@@ -179,21 +193,21 @@ impl HotReloadServer {
             return;
         };
         if self.cfg.ir_enabled {
-            let message = {
+            {
                 let mut guard = self.templates.lock().unwrap();
                 let (templates, active) = &mut *guard;
                 let old = templates.insert(path.to_path_buf(), new.clone());
                 let same_view = active.as_deref() == Some(path);
                 *active = Some(path.to_path_buf());
-                match old {
+                let message = match old {
                     // Patches are relative to what the client shows, so only diff
                     // against the template that is already on screen.
                     Some(old) if same_view => plan_hot_reload(&old, &new, &TemplateContext::new()),
                     _ => full_reload(&new, "template switched"),
+                };
+                if !matches!(message, HotReloadMessage::Noop) {
+                    self.broadcast(message);
                 }
-            };
-            if !matches!(message, HotReloadMessage::Noop) {
-                self.broadcast(message);
             }
         }
         if let Some(sg) = &self.cfg.swiftgen {
@@ -247,6 +261,41 @@ mod tests {
     }
 
     #[test]
+    fn token_is_required_before_receiving_any_messages() {
+        use tungstenite::client::IntoClientRequest;
+
+        let dir = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let _server = HotReloadServer::start(
+            listener,
+            ServerConfig {
+                watch_dir: dir.path().to_path_buf(),
+                ir_enabled: true,
+                swiftgen: None,
+                token: Some("test-secret".into()),
+            },
+        );
+        for token in [None, Some("Bearer wrong")] {
+            let mut request = url.clone().into_client_request().unwrap();
+            if let Some(token) = token {
+                request
+                    .headers_mut()
+                    .insert("authorization", token.parse().unwrap());
+            }
+            assert!(
+                matches!(tungstenite::connect(request), Err(tungstenite::Error::Http(response)) if response.status() == 401)
+            );
+        }
+        let mut request = url.into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert("authorization", "Bearer test-secret".parse().unwrap());
+        let (mut ws, _) = tungstenite::connect(request).unwrap();
+        assert_eq!(recv(&mut ws)["message"]["kind"], "devHello");
+    }
+
+    #[test]
     fn serves_hello_current_ir_and_updates_on_save() {
         let dir = tempfile::tempdir().unwrap();
         let main = dir.path().join("main.crepus");
@@ -260,6 +309,7 @@ mod tests {
                 watch_dir: dir.path().to_path_buf(),
                 ir_enabled: true,
                 swiftgen: None,
+                token: None,
             },
         );
 
