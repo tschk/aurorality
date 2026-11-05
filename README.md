@@ -193,7 +193,7 @@ A template save needs no rebuild while such an app is running. Swift changes, an
 
 `aurorality dev --serve` also serves hot reload on `ws://127.0.0.1:47832` (`--port`), and passes `AURORALITY_DEV_PORT` to the launched app. Use it for `HotReloadClient` consumers: the Runner preview app and `AurorDevOverlay`.
 
-The server binds to loopback by default and does not provide TLS. For a real device, prefer an encrypted tunnel to the loopback listener. To deliberately expose the unencrypted listener, set a strong, random `AURORALITY_DEV_TOKEN` in the server environment, run `aurorality dev --serve --host 0.0.0.0 --insecure-cleartext`, and pass the same `token` to `HotReloadClient`. Non-loopback listeners refuse to start without both the explicit flag and a token, and require that token on every WebSocket handshake.
+The server binds to loopback by default and does not provide TLS. For a real device, prefer an authenticated encrypted tunnel to the loopback listener; the loopback server itself does not authenticate clients. To deliberately expose the unencrypted listener, set a strong, random `AURORALITY_DEV_TOKEN` in the server environment, run `aurorality dev --serve --host 0.0.0.0 --insecure-cleartext`, and pass the same `token` to `HotReloadClient`. Non-loopback listeners refuse to start without both the explicit flag and a token, and require that token on every WebSocket handshake.
 
 **Threat model:** the flag does not make a network safe. Anyone able to observe the connection can read and reuse the token, read template contents and project paths, or alter traffic. Use the override only on a network where you accept those risks, and stop the server when finished.
 
