@@ -32,6 +32,11 @@ features. The first target is a macOS development experience using the existing
 SwiftUI IR renderer and `aurorality dev`. Generated Swift is a separate render
 path and is not covered by the first playground.
 
+The `aurorality-inspect` prototype renders a template from standard input to
+formatted IR and accepts context with `--context`. It exercises real template
+rendering and reports invalid context paths on Linux, but it is not a native
+preview, node inspector, or interactive control surface.
+
 The playground pairs a native preview with a node tree, an inspector, and a
 context editor. Selecting a preview node or tree entry selects the same node in
 the inspector. The inspector shows source classes, decoded IR, and the SwiftUI

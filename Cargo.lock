@@ -135,6 +135,7 @@ name = "aurorality-cli"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "aurorality-core",
  "clap",
  "console",
  "crepuscularity-core",
