@@ -7,9 +7,9 @@ class being parsed into IR does not mean that SwiftUI renders every combination
 with web-equivalent behavior. Priorities for making templates useful as native
 applications:
 
-1. **Make context loss visible.** `crates/aurorality-core/src/render.rs` silently
-   drops nested objects and non-object array elements. Report unsupported values
-   with their paths, and investigate extending the upstream template value model.
+1. **Make context loss visible.** `crates/aurorality-core/src/render.rs` rejects
+   unsupported nested objects and non-object array elements with their paths.
+   Investigate extending the upstream template value model to support them.
 2. **Make IR controls interactive.** The IR renderer's input and picker use
    constant preview bindings. Design observable state and event bindings before
    presenting these as application controls; generated Swift is a separate path.
@@ -24,6 +24,92 @@ applications:
    node's source classes, decoded IR, effective native styling, and warnings
    for unsupported or approximate behavior. Editable state and native controls
    would make this a creative prototyping tool rather than a static preview.
+
+### Playground product plan
+
+This section is a proposal, not a description of implemented playground
+features. The first target is a macOS development experience using the existing
+SwiftUI IR renderer and `aurorality dev`. Generated Swift is a separate render
+path and is not covered by the first playground.
+
+The playground pairs a native preview with a node tree, an inspector, and a
+context editor. Selecting a preview node or tree entry selects the same node in
+the inspector. The inspector shows source classes, decoded IR, and the SwiftUI
+modifiers and values actually applied by the renderer. It also distinguishes
+unsupported classes, values lost before rendering, and known approximations.
+For example, flex growth currently expands width without parent-axis context,
+and absolute positioning uses offsets rather than web positioning. Width and
+height resolution and box styling on text and buttons also need verification.
+A warning must name the affected node and property, explain the difference,
+and point to the source when a location is available. Unknown behavior must
+not be labeled web-equivalent.
+
+Source classes, source locations, stable node identities, and effective native
+styles are not established inspector data. Add development metadata through
+the render and hot-reload paths rather than inferring source from the IR.
+When metadata is unavailable, show that it is unavailable. Reconcile selection
+after a patch or full reload using stable identity; if a node disappears, clear
+the selection rather than selecting a different node by its old tree index.
+Keep this metadata and the overlay out of production output.
+
+The context editor starts with a JSON object and offers typed controls for
+supported values. Applying an edit rerenders the current template through the
+same Rust render path as `AurorState.load`. Invalid JSON or render errors leave
+the last successful preview and edited text available for correction. Report
+paths for values the context conversion rejects, including nested objects and
+non-object array elements. Reset restores the example's initial context.
+Context edits are local preview state, not writes to an example or backend.
+
+Native inputs and pickers need observable bindings and explicit event routing
+before the playground presents them as interactive. Today the IR renderer uses
+constant bindings for both. Define which context key each control edits, how a
+change rerenders the template, and how button events reach a preview handler.
+Show unbound controls as preview-only, not as working application controls.
+The playground must not invoke production plugins or persist changes without
+an explicit development configuration.
+
+Example workflows to support:
+
+- Open `examples/counter`, change `count` in the context editor, and inspect
+  the resulting text and layout. Once event routing exists, use the increment
+  and decrement buttons and observe the context and preview update together.
+- Open `examples/textanalyzer` with sample statistics and a `history` list of
+  objects. Edit a value and inspect the repeated nodes. Enter an unsupported
+  nested object or primitive array and see the rejected path before applying it.
+- Select a flex child or an absolutely positioned node in a small fixture.
+  Compare its source class, IR value, native modifier, and approximation warning.
+  Edit the template and verify that selection and warnings reflect the new IR.
+
+Deliver the playground in stages. Each stage has an observable acceptance gate:
+
+1. **Preview and diagnostics.** Open a template and context in the native
+   preview. Show render errors without losing the last successful preview.
+   A macOS integration test covers an invalid edit followed by a valid edit.
+   The dev connection shows disconnected and error states. A failed patch
+   triggers a full reload, and a successful update clears the error.
+2. **Inspector.** Select nodes in the preview and tree. For a fixture with flex
+   growth and absolute positioning, verify source classes, IR, applied native
+   values, and the matching warnings. Test selection across patch, full reload,
+   and node deletion. Missing metadata is visibly marked unavailable.
+3. **Editable context.** Change a scalar and a list of objects, then verify
+   the rendered output changes. Invalid JSON preserves the preview. Unsupported
+   values produce path-specific warnings, and reset restores the initial data.
+4. **Interactive controls.** Bind a text input and picker to context and route
+   a counter button to a development handler. Verify edits, events, rerenders,
+   and reset in a real SwiftUI interaction test. Unbound controls are labeled.
+
+The playground is a native preview, not a browser or a CSS conformance oracle.
+Warnings cover known cases only and cannot prove equivalence. It does not
+promise production state persistence, arbitrary plugin execution, generated
+Swift parity, or support for context shapes the template engine cannot express.
+The existing hot-reload client applies full and patch messages, but recovery
+from failed mutations and error clearing are prerequisites, not assumptions.
+
+**Requires hands-on Mac verification:** the native playground's rendered
+layout, pointer and keyboard interactions, real-device networking, and the
+iOS Simulator build and launch have not been verified in this Linux orb.
+GitHub's macOS CI can compile and run automated tests but does not replace
+inspection of those experiences on a Mac or device.
 
 ## Priority 1: CSS Property Coverage (Critical)
 
