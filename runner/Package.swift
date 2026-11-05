@@ -1,7 +1,9 @@
 // swift-tools-version:5.9
+import Foundation
 import PackageDescription
 
-let rustLibPath = "../target/debug"
+// `aurorality run --ios` points this at the iOS Simulator build of aurorality-core.
+let rustLibPath = ProcessInfo.processInfo.environment["AURORALITY_RUST_LIB_DIR"] ?? "../target/debug"
 
 let package = Package(
     name: "AurorRunner",

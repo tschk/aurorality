@@ -2,6 +2,12 @@ import SwiftUI
 import Aurorality
 
 #if SWIFT_PACKAGE
+private let resourceBundle = Bundle.module
+#else
+private let resourceBundle = Bundle.main
+#endif
+
+#if SWIFT_PACKAGE
 private func resourceURL(_ name: String, _ ext: String) -> URL? {
     Bundle.module.url(forResource: name, withExtension: ext)
 }
@@ -46,8 +52,7 @@ struct BasicApp: App {
         let copy = (try? bridge.invokeData(pluginId: "basicJs", method: "describe", payload: jsPayload, as: BasicCopy.self))
             ?? BasicCopy(headline: "Hello from aurorality", detail: "SwiftUI + Rust + JavaScript", badge: "three backends")
 
-        let url = resourceURL("main", "crepus")
-        let template = url.flatMap { try? String(contentsOf: $0) } ?? "No template found"
+        let template = (try? AurorTemplates.source("main", bundle: resourceBundle)) ?? "No template found"
         try? state.load(template: template, context: [
             "headline": .string(copy.headline),
             "detail": .string(copy.detail),
@@ -55,6 +60,8 @@ struct BasicApp: App {
             "sessionOwner": .string(session.owner),
             "sessionMode": .string(session.mode),
         ])
+        // `aurorality dev`: re-render views/main.crepus on save with this context.
+        state.watchLiveTemplate("main")
     }
 }
 

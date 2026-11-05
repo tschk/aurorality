@@ -21,7 +21,8 @@ aurorality/
 │   ├── aurorality-cli/      # Dev server, build commands
 │   │   └── src/
 │   │       ├── main.rs    # CLI entry
-│   │       ├── dev_server.rs
+│   │       ├── dev_loop.rs   # watch → live reload / rebuild loop (no port by default)
+│   │       ├── hot_reload.rs # WebSocket hot-reload server (`dev --serve`)
 │   │       └── scaffold.rs
 │   └── aurorality-macros/
 ├── swift/Sources/Aurorality/
@@ -30,7 +31,8 @@ aurorality/
 │   ├── AurorState.swift     # @Observable state container
 │   ├── AurorBridge.swift    # Swift plugin invoke → Rust
 │   ├── AurorApp.swift       # App entry point
-│   └── HotReloadClient.swift
+│   ├── AurorLiveTemplate.swift # in-process hot reload (AURORALITY_VIEWS_DIR)
+│   └── HotReloadClient.swift   # WebSocket client for `dev --serve`
 └── examples/
     ├── basic/
     ├── counter/
@@ -90,8 +92,8 @@ cargo build -p aurorality-core
 # Test
 cargo test -p aurorality-core
 
-# Dev server
-cargo run -p aurorality-cli -- dev examples/basic
+# Dev server (run from a project directory)
+cd examples/basic && cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- dev
 ```
 
 ## Current Coverage Gaps

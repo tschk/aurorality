@@ -4,6 +4,7 @@ mod bindgen;
 mod build_swift;
 mod bundle;
 mod dev_loop;
+mod hot_reload;
 mod scaffold;
 mod swiftgen;
 mod swiftgen_style;
@@ -27,15 +28,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Watch views/ + Sources/, rebuild + relaunch on change.
+    /// Build, launch, and live-reload the app; rebuild on code changes.
     ///
-    /// Pre-builds Rust core + bindings once, then watches for file changes.
-    /// On any change: kills the running app, rebuilds Swift, and relaunches.
-    /// No WebSocket, no ports — same pattern as `crepus dev`.
+    /// By default there is no server and no port: the app is launched with
+    /// `AURORALITY_VIEWS_DIR` and re-renders its own templates on save
+    /// (`AurorState.watchLiveTemplate`). Swift changes, and template saves for
+    /// apps that do not watch, kill the app, rebuild, and relaunch it.
+    ///
+    /// `--serve` also runs the WebSocket server (ws://127.0.0.1:<port>) for
+    /// `HotReloadClient`: the Runner, `aurorDevOverlay`, and real devices.
     Dev {
         /// Directory of `.crepus` files to watch.
         #[arg(short, long, default_value = "views")]
         watch: PathBuf,
+        /// Also serve hot reload over WebSocket for `HotReloadClient`.
+        #[arg(long)]
+        serve: bool,
+        /// WebSocket port for `--serve` (default 47832).
+        #[arg(long, requires = "serve")]
+        port: Option<u16>,
+        /// With `--serve`: do not send IR patches (swiftgen status only).
+        #[arg(long, requires = "serve")]
+        no_ir: bool,
+        /// With `--serve`: re-run swiftgen on this `.crepus` file after each save.
+        #[arg(long, requires = "swiftgen_out", requires = "serve")]
+        swiftgen_view: Option<PathBuf>,
+        /// Output directory for swiftgen.
+        #[arg(long, requires = "swiftgen_view")]
+        swiftgen_out: Option<PathBuf>,
+        #[arg(long, default_value = "GeneratedView")]
+        swiftgen_view_name: String,
+        #[arg(long, default_value = "HyperChatContext")]
+        swiftgen_context_type: String,
     },
 
     /// Build and launch the SwiftUI app.
@@ -57,8 +81,14 @@ enum Commands {
         out: PathBuf,
     },
 
-    /// Scaffold a new aurorality project.
-    New { name: String },
+    /// Scaffold a new aurorality project (a SwiftPM package).
+    New {
+        name: String,
+        /// Path to the aurorality checkout the project builds against
+        /// (defaults to the checkout this CLI was built from).
+        #[arg(long)]
+        aurorality: Option<PathBuf>,
+    },
 
     /// Bundle JS + compile .crepus templates to IR JSON.
     Bundle {
@@ -100,13 +130,37 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Dev { watch } => {
-            dev_loop::run(watch);
+        Commands::Dev {
+            watch,
+            serve,
+            port,
+            no_ir,
+            swiftgen_view,
+            swiftgen_out,
+            swiftgen_view_name,
+            swiftgen_context_type,
+        } => {
+            let swiftgen =
+                swiftgen_view
+                    .zip(swiftgen_out)
+                    .map(|(view, out)| hot_reload::SwiftgenConfig {
+                        view,
+                        out,
+                        view_name: swiftgen_view_name,
+                        context_type: swiftgen_context_type,
+                    });
+            let serve = serve.then(|| dev_loop::Serve {
+                port: port.unwrap_or(hot_reload::DEFAULT_PORT),
+                ir_enabled: !no_ir,
+                swiftgen,
+            });
+            dev_loop::run(watch, serve)?;
         }
         Commands::Run { project, ios } => {
             pre_build()?;
             if ios {
-                build_swift::build_and_launch_ios(&project)?;
+                let rust_lib_dir = pre_build_ios(&project)?;
+                build_swift::build_and_launch_ios(&project, &rust_lib_dir)?;
             } else {
                 build_swift::build_and_launch(&project, None)?;
             }
@@ -114,8 +168,8 @@ fn main() -> Result<()> {
         Commands::Build { watch, out } => {
             build_all(&watch, &out)?;
         }
-        Commands::New { name } => {
-            scaffold::new_project(&name)?;
+        Commands::New { name, aurorality } => {
+            scaffold::new_project(&name, aurorality.as_deref())?;
         }
         Commands::Bundle {
             views,
@@ -221,6 +275,84 @@ pub fn pre_build() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Rust target for the arm64 iOS Simulator (matches `arm64-apple-ios-simulator`).
+pub const IOS_SIM_RUST_TARGET: &str = "aarch64-apple-ios-sim";
+
+/// Build `aurorality-core` for the iOS Simulator and return a directory that
+/// contains only the static library, so the Swift link step cannot fall back
+/// to the host (macOS) build or to a dylib the app bundle does not embed.
+pub fn pre_build_ios(project: &Path) -> Result<PathBuf> {
+    let ws = aurorality_checkout(project)?;
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    println!("building aurorality-core for {IOS_SIM_RUST_TARGET}...");
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "-p",
+            "aurorality-core",
+            "--features",
+            "js",
+            "--target",
+            IOS_SIM_RUST_TARGET,
+        ])
+        .current_dir(&ws)
+        .status()
+        .map_err(|e| anyhow::anyhow!("cargo build --target {IOS_SIM_RUST_TARGET}: {e}"))?;
+    if !status.success() {
+        anyhow::bail!(
+            "cargo build for {IOS_SIM_RUST_TARGET} failed ({}); is the target installed? \
+             (`rustup target add {IOS_SIM_RUST_TARGET}`)",
+            status.code().unwrap_or(1)
+        );
+    }
+
+    // Cargo writes to CARGO_TARGET_DIR when set (relative paths resolve against `ws`).
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .filter(|d| !d.is_empty())
+        .map_or_else(|| ws.join("target"), |d| ws.join(d));
+    let staticlib = target_dir
+        .join(IOS_SIM_RUST_TARGET)
+        .join("debug/libaurorality_core.a");
+    if !staticlib.is_file() {
+        anyhow::bail!(
+            "cargo build for {IOS_SIM_RUST_TARGET} did not produce {}",
+            staticlib.display()
+        );
+    }
+    let link_dir = target_dir.join(IOS_SIM_RUST_TARGET).join("aurorality-link");
+    std::fs::create_dir_all(&link_dir)?;
+    std::fs::copy(&staticlib, link_dir.join("libaurorality_core.a"))?;
+    Ok(std::path::absolute(&link_dir)?)
+}
+
+/// The aurorality checkout whose Rust core the project links: `[aurorality].path`
+/// in the project's `crepus.toml` / `.brisk.toml` (written by `aurorality new`),
+/// else the enclosing Cargo workspace if it contains `aurorality-core`.
+fn aurorality_checkout(project: &Path) -> Result<PathBuf> {
+    for file in ["crepus.toml", ".brisk.toml"] {
+        let Ok(raw) = std::fs::read_to_string(project.join(file)) else {
+            continue;
+        };
+        let value: toml::Value = toml::from_str(&raw)?;
+        if let Some(path) = value
+            .get("aurorality")
+            .and_then(|a| a.get("path"))
+            .and_then(|p| p.as_str())
+        {
+            return Ok(project.join(path));
+        }
+    }
+    let ws = find_workspace_root();
+    if ws.join("crates/aurorality-core/Cargo.toml").is_file() {
+        return Ok(ws);
+    }
+    anyhow::bail!(
+        "cannot find the aurorality checkout for {}: set [aurorality] path in .brisk.toml",
+        project.display()
+    )
 }
 
 fn configured_pre_build_commands() -> Result<Option<Vec<String>>> {
