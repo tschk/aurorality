@@ -37,7 +37,7 @@ fn launches(log: &Path) -> Vec<String> {
 
 /// Runs `aurorality dev` on a fake project whose "app" logs its environment and,
 /// when `announce` is set, creates the live marker like `watchLiveTemplate`.
-fn run(announce: bool, observer: bool) -> Vec<String> {
+fn run(announce: bool, observer: bool, changed_name: &str) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     let project = dir.path().join("proj");
@@ -45,7 +45,7 @@ fn run(announce: bool, observer: bool) -> Vec<String> {
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::create_dir_all(project.join("views")).unwrap();
     let marker_cmd = if announce {
-        ": > \"$AURORALITY_LIVE_MARKER\""
+        "echo \"$AURORALITY_VIEWS_DIR/main.crepus\" > \"$AURORALITY_LIVE_MARKER\""
     } else {
         ":"
     };
@@ -73,7 +73,8 @@ fn run(announce: bool, observer: bool) -> Vec<String> {
         "[package]\nname = \"FixtureApp\"\n",
     )
     .unwrap();
-    let template = project.join("views/main.crepus");
+    std::fs::write(project.join("views/main.crepus"), "span\n  \"main\"\n").unwrap();
+    let template = project.join("views").join(changed_name);
     std::fs::write(&template, "span\n  \"one\"\n").unwrap();
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -123,7 +124,7 @@ fn run(announce: bool, observer: bool) -> Vec<String> {
 
 #[test]
 fn watching_app_is_not_relaunched_on_template_save_and_no_port_is_used() {
-    let launches = run(true, false);
+    let launches = run(true, false, "main.crepus");
     assert_eq!(launches.len(), 1, "{launches:?}");
     // No server, so the dev overlay (which would connect to one) stays off.
     assert!(
@@ -138,12 +139,18 @@ fn watching_app_is_not_relaunched_on_template_save_and_no_port_is_used() {
 
 #[test]
 fn app_that_does_not_watch_is_rebuilt_on_template_save() {
-    let launches = run(false, false);
+    let launches = run(false, false, "main.crepus");
     assert_eq!(launches.len(), 2, "{launches:?}");
 }
 
 #[test]
 fn unrelated_websocket_client_does_not_prevent_relaunch() {
-    let launches = run(false, true);
+    let launches = run(false, true, "main.crepus");
+    assert_eq!(launches.len(), 2, "{launches:?}");
+}
+
+#[test]
+fn app_watching_another_template_is_rebuilt() {
+    let launches = run(true, false, "other.crepus");
     assert_eq!(launches.len(), 2, "{launches:?}");
 }

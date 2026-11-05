@@ -157,13 +157,11 @@ impl HotReloadServer {
         if ws.send(self.envelope(hello)).is_err() {
             return;
         }
+        let templates = self.templates.lock().unwrap();
         if self.cfg.ir_enabled {
-            let current = {
-                let guard = self.templates.lock().unwrap();
-                guard.1.as_ref().and_then(|p| guard.0.get(p)).cloned()
-            };
+            let current = templates.1.as_ref().and_then(|p| templates.0.get(p));
             if let Some(template) = current {
-                let msg = full_reload(&template, "connected");
+                let msg = full_reload(template, "connected");
                 if ws.send(self.envelope(msg)).is_err() {
                     return;
                 }
@@ -171,6 +169,7 @@ impl HotReloadServer {
         }
         let id = self.next_client.fetch_add(1, Ordering::SeqCst);
         self.clients.lock().unwrap().push((id, ws));
+        drop(templates);
         // Clients never send anything we need; read only to notice the close so
         // `client_count` does not keep counting an app that has exited.
         let server = Arc::clone(self);
@@ -194,21 +193,21 @@ impl HotReloadServer {
             return;
         };
         if self.cfg.ir_enabled {
-            let message = {
+            {
                 let mut guard = self.templates.lock().unwrap();
                 let (templates, active) = &mut *guard;
                 let old = templates.insert(path.to_path_buf(), new.clone());
                 let same_view = active.as_deref() == Some(path);
                 *active = Some(path.to_path_buf());
-                match old {
+                let message = match old {
                     // Patches are relative to what the client shows, so only diff
                     // against the template that is already on screen.
                     Some(old) if same_view => plan_hot_reload(&old, &new, &TemplateContext::new()),
                     _ => full_reload(&new, "template switched"),
+                };
+                if !matches!(message, HotReloadMessage::Noop) {
+                    self.broadcast(message);
                 }
-            };
-            if !matches!(message, HotReloadMessage::Noop) {
-                self.broadcast(message);
             }
         }
         if let Some(sg) = &self.cfg.swiftgen {

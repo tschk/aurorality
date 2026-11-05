@@ -191,7 +191,18 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
                         );
                     }
                 }
-                if templates_only && launch.marker.exists() && app_running(&child) {
+                let watched = std::fs::read_to_string(&launch.marker).unwrap_or_default();
+                if templates_only
+                    && changed.iter().all(|path| {
+                        let Ok(path) = path.canonicalize() else {
+                            return false;
+                        };
+                        watched
+                            .lines()
+                            .any(|line| Path::new(line).canonicalize().ok().as_ref() == Some(&path))
+                    })
+                    && app_running(&child)
+                {
                     println!("  template saved — app reloaded it in place");
                     handled = true;
                 }

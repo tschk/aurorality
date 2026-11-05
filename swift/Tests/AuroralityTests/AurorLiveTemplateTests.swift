@@ -31,7 +31,8 @@ final class AurorLiveTemplateTests: XCTestCase {
         try state.load(template: AurorTemplates.source("main"), context: ["title": .string("Ctx")])
         XCTAssertTrue(state.watchLiveTemplate("main"))
         XCTAssertEqual(text(state), "Hello Ctx")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("live-marker").path))
+        let marker = try String(contentsOf: dir.appendingPathComponent("live-marker"), encoding: .utf8)
+        XCTAssertEqual(marker, file.standardizedFileURL.path)
 
         // In-place write.
         try "span text-base\n  \"Edited {title}\"\n".write(to: file, atomically: false, encoding: .utf8)
