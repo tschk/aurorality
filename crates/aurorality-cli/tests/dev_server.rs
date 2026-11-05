@@ -18,13 +18,32 @@ impl Drop for KillOnDrop {
 fn non_loopback_listener_requires_a_token() {
     let project = tempfile::tempdir().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_aurorality"))
-        .args(["dev", "--serve", "--host", "0.0.0.0"])
+        .args([
+            "dev",
+            "--serve",
+            "--host",
+            "0.0.0.0",
+            "--insecure-cleartext",
+        ])
         .current_dir(project.path())
         .env_remove("AURORALITY_DEV_TOKEN")
         .output()
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("AURORALITY_DEV_TOKEN"));
+}
+
+#[test]
+fn non_loopback_listener_refuses_cleartext_without_opt_in() {
+    let project = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args(["dev", "--serve", "--host", "0.0.0.0"])
+        .current_dir(project.path())
+        .env("AURORALITY_DEV_TOKEN", "test-secret")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--insecure-cleartext"));
 }
 
 #[test]

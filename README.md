@@ -193,9 +193,9 @@ A template save needs no rebuild while such an app is running. Swift changes, an
 
 `aurorality dev --serve` also serves hot reload on `ws://127.0.0.1:47832` (`--port`), and passes `AURORALITY_DEV_PORT` to the launched app. Use it for `HotReloadClient` consumers: the Runner preview app and `AurorDevOverlay`.
 
-For a real device, set a strong, random `AURORALITY_DEV_TOKEN` in the dev server's environment, run `aurorality dev --serve --host 0.0.0.0`, and connect `HotReloadClient` to the Mac's LAN address and port with the same `token`. Non-loopback listeners refuse to start without a token and require it on every WebSocket handshake. The default remains loopback-only.
+The server binds to loopback by default and does not provide TLS. For a real device, prefer an encrypted tunnel to the loopback listener. To deliberately expose the unencrypted listener, set a strong, random `AURORALITY_DEV_TOKEN` in the server environment, run `aurorality dev --serve --host 0.0.0.0 --insecure-cleartext`, and pass the same `token` to `HotReloadClient`. Non-loopback listeners refuse to start without both the explicit flag and a token, and require that token on every WebSocket handshake.
 
-The connection is **not encrypted**: the token, template contents, and project paths can be observed on the network. Use only a trusted network or an encrypted tunnel, and stop the server when finished.
+**Threat model:** the flag does not make a network safe. Anyone able to observe the connection can read and reuse the token, read template contents and project paths, or alter traffic. Use the override only on a network where you accept those risks, and stop the server when finished.
 
 1. **`DevHello` on connect**: session id, watch dir, optional swiftgen paths. The current template follows as a `fullReload`.
 2. **IR reload / patches**, unless `--no-ir`: each `.crepus` save sends an `IrMutation` patch (`replaceRoot`, `replaceNode`, …), or a full reload when the template's shape changed. **The server renders with an empty context**, so templates that use app context variables show them unresolved. In-process reload doesn't have this problem.

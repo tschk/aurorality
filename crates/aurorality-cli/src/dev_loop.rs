@@ -23,6 +23,7 @@ use crate::hot_reload::{HotReloadServer, ServerConfig, SwiftgenConfig};
 pub struct Serve {
     pub port: u16,
     pub host: std::net::IpAddr,
+    pub insecure_cleartext: bool,
     pub ir_enabled: bool,
     pub swiftgen: Option<SwiftgenConfig>,
 }
@@ -93,6 +94,9 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
             let token = if s.host.is_loopback() {
                 None
             } else {
+                if !s.insecure_cleartext {
+                    anyhow::bail!("non-loopback hot reload has no TLS; use --insecure-cleartext only if you accept exposing the token and template data");
+                }
                 let token = std::env::var("AURORALITY_DEV_TOKEN").map_err(|_| {
                     anyhow::anyhow!("AURORALITY_DEV_TOKEN is required for non-loopback hot reload")
                 })?;
@@ -101,6 +105,7 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
                         "AURORALITY_DEV_TOKEN must be nonempty printable ASCII without spaces"
                     );
                 }
+                eprintln!("WARNING: hot reload is unencrypted; network observers can read the token, templates, and project paths");
                 Some(token)
             };
             let address = std::net::SocketAddr::new(s.host, port);

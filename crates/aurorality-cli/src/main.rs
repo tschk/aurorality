@@ -49,6 +49,9 @@ enum Commands {
         /// Address to bind for `--serve` (default 127.0.0.1).
         #[arg(long, requires = "serve", default_value = "127.0.0.1")]
         host: std::net::IpAddr,
+        /// Allow unencrypted network traffic, exposing the token and template data.
+        #[arg(long, requires = "serve")]
+        insecure_cleartext: bool,
         /// With `--serve`: do not send IR patches (swiftgen status only).
         #[arg(long, requires = "serve")]
         no_ir: bool,
@@ -137,6 +140,7 @@ fn main() -> Result<()> {
             serve,
             port,
             host,
+            insecure_cleartext,
             no_ir,
             swiftgen_view,
             swiftgen_out,
@@ -155,6 +159,7 @@ fn main() -> Result<()> {
             let serve = serve.then(|| dev_loop::Serve {
                 port: port.unwrap_or(hot_reload::DEFAULT_PORT),
                 host,
+                insecure_cleartext,
                 ir_enabled: !no_ir,
                 swiftgen,
             });
