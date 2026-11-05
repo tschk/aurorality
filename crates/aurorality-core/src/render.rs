@@ -3,6 +3,7 @@
 use crepuscularity_core::context::{TemplateContext, TemplateValue};
 use crepuscularity_native::{render_template_to_ir, to_json};
 use serde_json::Value;
+use std::path::Path;
 
 use crate::AurorError;
 
@@ -12,7 +13,23 @@ use crate::AurorError;
 /// `context_json` must be a JSON object whose keys become template variables.
 /// Pass `"{}"` for an empty context.
 pub fn render(template: &str, context_json: &str) -> Result<String, AurorError> {
-    let ctx = context_from_json(context_json)?;
+    render_with_context(template, context_from_json(context_json)?)
+}
+
+/// Render with filesystem includes confined to the given directory.
+pub fn render_with_include_root(
+    template: &str,
+    context_json: &str,
+    root: &Path,
+) -> Result<String, AurorError> {
+    let mut ctx = context_from_json(context_json)?;
+    ctx.base_dir = Some(root.canonicalize().map_err(|e| AurorError::RenderError {
+        message: format!("include root {}: {e}", root.display()),
+    })?);
+    render_with_context(template, ctx)
+}
+
+fn render_with_context(template: &str, ctx: TemplateContext) -> Result<String, AurorError> {
     let ir = render_template_to_ir(template, &ctx)
         .map_err(|e| AurorError::RenderError { message: e })?;
     to_json(&ir).map_err(|e| AurorError::RenderError {

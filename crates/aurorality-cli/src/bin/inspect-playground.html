@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aurorality IR playground</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; background: #10151b; color: #e9eef5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { padding: 22px 28px; border-bottom: 1px solid #34404d; }
+    h1 { margin: 0; font-size: 21px; } h2 { margin: 0; font-size: 15px; }
+    p { color: #b1bfce; line-height: 1.5; } header p { margin: 7px 0 0; }
+    main { padding: 22px 28px; max-width: 1600px; margin: auto; }
+    .notice { border: 1px solid #775a30; background: #30271d; color: #ffdfaa; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; }
+    .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 18px; }
+    .panel { background: #1a222c; border: 1px solid #34404d; border-radius: 8px; padding: 16px; min-width: 0; }
+    label { display: block; font-weight: 650; margin-bottom: 8px; }
+    textarea, pre { font: 13px/1.55 ui-monospace, SFMono-Regular, monospace; background: #10161d; color: #d8e5f4; border: 1px solid #34404d; border-radius: 6px; padding: 12px; }
+    textarea { width: 100%; resize: vertical; min-height: 180px; margin-bottom: 18px; }
+    textarea#context { min-height: 105px; }
+    button { font: inherit; cursor: pointer; } .render { background: #4f92ff; color: #071629; border: 0; border-radius: 6px; font-weight: 700; padding: 10px 18px; }
+    button:focus-visible, textarea:focus-visible { outline: 3px solid #9fc5ff; outline-offset: 2px; }
+    #status { margin: 0 0 14px; min-height: 24px; } #status.error { color: #ffb6ad; }
+    .output { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(0, 1.2fr); gap: 14px; }
+    .output h2 { margin-bottom: 10px; } #tree { min-height: 250px; }
+    ul { list-style: none; padding-left: 16px; margin: 0; } #tree > ul { padding: 0; }
+    .node { display: block; text-align: left; width: 100%; background: transparent; color: #cfdae8; border: 1px solid transparent; border-radius: 5px; padding: 7px; overflow-wrap: anywhere; }
+    .node:hover { background: #263646; } .node[aria-pressed="true"] { background: #234e7e; border-color: #6faeff; color: white; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 250px; margin: 0; }
+    .muted { color: #a4b4c7; } @media (max-width: 850px) { .columns, .output { grid-template-columns: 1fr; } main { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <header><h1>Aurorality IR playground</h1><p>Edit a template and context, then inspect the translated view tree.</p></header>
+  <main>
+    <div class="notice"><strong>IR output — not a SwiftUI preview.</strong> Styles are translated values, not measured native layout. Node paths identify this result only.</div>
+    <div class="columns">
+      <section class="panel" aria-label="Inputs">
+        <label for="template">Template</label>
+        <textarea id="template" spellcheck="false">div flex flex-col w-1/2
+  span text-base
+    "Hello {name}"</textarea>
+        <label for="context">Context (JSON)</label>
+        <textarea id="context" spellcheck="false">{
+  "name": "Ada"
+}</textarea>
+        <button class="render" id="render" type="button">Render to IR</button>
+      </section>
+      <section class="panel" aria-label="Translation result">
+        <p id="status" role="status" aria-live="polite">Render to inspect the translated tree.</p>
+        <div class="output">
+          <div><h2>IR tree</h2><div id="tree" class="muted">No result yet.</div></div>
+          <div><h2>Selected node</h2><pre id="detail">Select a node to inspect its IR.</pre></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const template = document.querySelector('#template');
+    const context = document.querySelector('#context');
+    const status = document.querySelector('#status');
+    const tree = document.querySelector('#tree');
+    const detail = document.querySelector('#detail');
+    const renderButton = document.querySelector('#render');
+    function addNode(node, path, parent) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'node'; button.setAttribute('aria-pressed', 'false');
+      button.textContent = `${node.kind || 'unknown'} · ${path}`;
+      button.addEventListener('click', () => {
+        tree.querySelectorAll('button').forEach(other => other.setAttribute('aria-pressed', 'false'));
+        button.setAttribute('aria-pressed', 'true');
+        detail.textContent = JSON.stringify(node, null, 2);
+      });
+      item.append(button);
+      if (Array.isArray(node.children) && node.children.length) {
+        const children = document.createElement('ul');
+        node.children.forEach((child, index) => addNode(child, `${path}.children[${index}]`, children));
+        item.append(children);
+      }
+      parent.append(item);
+    }
+    renderButton.addEventListener('click', async () => {
+      renderButton.disabled = true; status.className = ''; status.textContent = 'Rendering…';
+      tree.textContent = ''; detail.textContent = 'Select a node to inspect its IR.';
+      try {
+        const response = await fetch('/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template: template.value, context: context.value }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Render failed');
+        status.textContent = `Translated successfully · IR version ${result.ir.version}. Native layout is unverified.`;
+        if (!result.ir.root.length) { tree.textContent = 'No root nodes.'; return; }
+        const list = document.createElement('ul');
+        result.ir.root.forEach((node, index) => addNode(node, `root[${index}]`, list));
+        tree.append(list);
+      } catch (error) {
+        status.className = 'error'; status.textContent = error.message || 'Render failed';
+        tree.textContent = 'No result.';
+      } finally { renderButton.disabled = false; }
+    });
+  </script>
+</body>
+</html>

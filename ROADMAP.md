@@ -27,15 +27,15 @@ applications:
 
 ### Playground product plan
 
-This section is a proposal, not a description of implemented playground
-features. The first target is a macOS development experience using the existing
-SwiftUI IR renderer and `aurorality dev`. Generated Swift is a separate render
-path and is not covered by the first playground.
+The current `aurorality-inspect --playground` is a local browser-based IR
+inspector: edit a template and context, render, and select nodes to examine
+their JSON. It is not a native preview or an interactive control surface.
+The original stdin/`--context` inspector remains available. See the README for
+its security and rendering limits.
 
-The `aurorality-inspect` prototype renders a template from standard input to
-formatted IR and accepts context with `--context`. It exercises real template
-rendering and reports invalid context paths on Linux, but it is not a native
-preview, node inspector, or interactive control surface.
+The following is a proposal for a future macOS development experience using the
+SwiftUI IR renderer and `aurorality dev`. Generated Swift is a separate render
+path and is not covered by that proposal.
 
 The playground pairs a native preview with a node tree, an inspector, and a
 context editor. Selecting a preview node or tree entry selects the same node in
@@ -103,7 +103,7 @@ Deliver the playground in stages. Each stage has an observable acceptance gate:
    a counter button to a development handler. Verify edits, events, rerenders,
    and reset in a real SwiftUI interaction test. Unbound controls are labeled.
 
-The playground is a native preview, not a browser or a CSS conformance oracle.
+The proposed native playground is not a CSS conformance oracle.
 Warnings cover known cases only and cannot prove equivalence. It does not
 promise production state persistence, arbitrary plugin execution, generated
 Swift parity, or support for context shapes the template engine cannot express.
@@ -116,38 +116,50 @@ iOS Simulator build and launch have not been verified in this Linux orb.
 GitHub's macOS CI can compile and run automated tests but does not replace
 inspection of those experiences on a Mac or device.
 
-## Priority 1: CSS Property Coverage (Critical)
+## Priority 1: CSS property inventory (not a coverage score)
 
-### Spacing ✓ (Complete)
+There is no measured percentage of CSS or SwiftUI layout conformance in this
+repository. The lists below are historical implementation claims to audit,
+not counts of verified behavior: an IR field, a parsed class, or a successful
+render alone does not establish that SwiftUI matches web layout. A `done` here
+means previously reported as implemented, not native rendering verified.
+
+**Evidence currently available:** Rust tests exercise selected template-to-IR
+outputs; Swift `ViewStyleTests` check decoded values and Codable behavior; the
+macOS hot-reload test checks delivery of IR, not layout geometry. None of these
+checks establishes visual or behavioral equivalence to a browser. Native layout
+verification remains unmeasured until representative rendered comparisons exist.
+
+### Spacing
 - p-, px-, py-, pt-, pb-, pl-, pr-: done
 - m-, mx-, my-, mt-, mb-, ml-, mr-: done
 
-### Sizing ✓ (Complete)
+### Sizing
 - w-, h-, min-w-, max-w-, min-h-, max-h-: done
 - widthFraction, heightFraction: done
 - aspect-ratio: done
 - size-: done
 
-### Typography ✓ (Very Strong)
+### Typography
 - text-size, font-weight, font-family: done
 - text-align, leading, tracking: done
 - text-transform: done
 - italic, underline, line-through: done
 - line-height: done
 
-### Colors ✓ (Strong)
+### Colors
 - foreground/background colors: done
 - border-color: done
 
-### Border ✓ (Complete)
+### Border
 - border-width, corner-radius: done
 
-### Flex ✓ (Strong)
+### Flex
 - flex-grow, flex_shrink: done
 - flex-wrap: done
 - align-self: done
 
-### Visibility ✓ (Basic)
+### Visibility
 - opacity, hidden, overflow_hidden: done
 
 ---
@@ -256,7 +268,7 @@ inspection of those experiences on a Mac or device.
 
 ---
 
-## Completed ✓
+## Historical implementation inventory (not native verification)
 
 - Padding/margin (14 props)
 - Sizing (w/h, min/max, aspect)

@@ -26,6 +26,8 @@ aurorality-core = { path = "../aurorality-core" }
 toml = "0.9"
 ctrlc = "3"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+tiny_http = "0.12"
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"

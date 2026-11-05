@@ -73,6 +73,27 @@ cd examples/counter && ./run.sh
 cd examples/basic && cargo run --manifest-path ../../Cargo.toml -p aurorality-cli -- dev
 ```
 
+### Inspect rendered IR
+
+Run `cargo run -p aurorality-cli --bin aurorality-inspect -- --playground` and
+open the address printed by the command on the same machine. Edit the template
+and JSON context, render, and select a node to inspect its IR and style fields.
+The context must be an object; values may be scalars, null, or arrays of objects.
+
+This is an IR inspector, not a SwiftUI preview: it does not compute native
+layout, execute actions or plugins, or map nodes back to source locations. Node
+paths refer only to the current result.
+
+Includes are confined to the working directory by default. Start from your
+project directory, or pass `--include-root <directory>` after `--playground`.
+Absolute paths, `..` components, and symlinks that escape the include directory
+are rejected. Nested includes resolve relative to the including file and cannot
+use `..`, even to reach another file inside the root.
+
+The server listens on loopback, but it is not a sandbox. Include checks are not
+race-free against concurrent filesystem changes, and local processes can access
+the server. Use only trusted templates and do not expose it to a network.
+
 ## Template Syntax
 
 `.crepus` files use a Lisp-like indentation syntax with Tailwind classes:
@@ -96,9 +117,15 @@ div.flex.flex-col.gap-4.p-8
 | `scroll` | ScrollView wrapper |
 | `slotRotate` | Timed phrase rotation |
 
-### Supported Styles (ViewStyle IR)
+### Style vocabulary (ViewStyle IR)
 
-See `crepuscularity-native/src/ir.rs` for the full ViewStyle schema.
+These are examples of the style vocabulary, not a measured CSS or SwiftUI
+conformance guarantee. Parser recognition, IR fields, Swift decoding, and
+rendered native behavior are distinct. The IR renderer and generated Swift
+support different subsets; some fields or combinations are ignored or
+approximated. Existing tests do not measure native layout equivalence. See
+`crepuscularity-native/src/ir.rs` for the full ViewStyle schema and
+`ROADMAP.md` for the evidence and known limitations.
 
 #### Spacing (`ir.rs` line 29-59)
 - `p-[1-96]`, `px-`, `py-`, `pt-`, `pb-`, `pl-`, `pr-`
