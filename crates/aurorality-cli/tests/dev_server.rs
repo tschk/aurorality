@@ -15,6 +15,19 @@ impl Drop for KillOnDrop {
 }
 
 #[test]
+fn non_loopback_listener_requires_a_token() {
+    let project = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_aurorality"))
+        .args(["dev", "--serve", "--host", "0.0.0.0"])
+        .current_dir(project.path())
+        .env_remove("AURORALITY_DEV_TOKEN")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("AURORALITY_DEV_TOKEN"));
+}
+
+#[test]
 fn dev_serves_hot_reload_over_websocket() {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
