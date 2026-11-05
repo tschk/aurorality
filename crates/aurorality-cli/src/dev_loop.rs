@@ -131,7 +131,13 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     // Initial build + launch
     {
         let mut child = child.lock().unwrap();
-        *child = Some(build_and_launch_app(&cwd, &launch)?);
+        *child = match build_and_launch_app(&cwd, &launch) {
+            Ok(child) => Some(child),
+            Err(e) => {
+                eprintln!("  {e:#}");
+                None
+            }
+        };
     }
 
     loop {
