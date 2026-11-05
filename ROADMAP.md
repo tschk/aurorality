@@ -1,5 +1,30 @@
 # Aurorality — Full Framework Roadmap
 
+## Product and reliability audit
+
+The checklists below track fields and features, not full CSS compatibility. A
+class being parsed into IR does not mean that SwiftUI renders every combination
+with web-equivalent behavior. Priorities for making templates useful as native
+applications:
+
+1. **Make context loss visible.** `crates/aurorality-core/src/render.rs` silently
+   drops nested objects and non-object array elements. Report unsupported values
+   with their paths, and investigate extending the upstream template value model.
+2. **Make IR controls interactive.** The IR renderer's input and picker use
+   constant preview bindings. Design observable state and event bindings before
+   presenting these as application controls; generated Swift is a separate path.
+3. **Test layout semantics, not just decoded fields.** Resolve width and height
+   independently, implement axis-aware flex and parent-aware positioning, and
+   verify box styling on text and buttons with rendered SwiftUI tests. Current
+   frames, positioning offsets, and stack behavior approximate web layout.
+4. **Make hot reload recoverable.** Surface failed mutations, recover with a
+   full reload, and clear errors on successful updates. Exercise the real Swift
+   client and Rust producer together in macOS CI.
+5. **Build an inspectable playground.** A development overlay could show each
+   node's source classes, decoded IR, effective native styling, and warnings
+   for unsupported or approximate behavior. Editable state and native controls
+   would make this a creative prototyping tool rather than a static preview.
+
 ## Priority 1: CSS Property Coverage (Critical)
 
 ### Spacing ✓ (Complete)
