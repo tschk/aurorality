@@ -19,13 +19,15 @@ public final class HotReloadClient {
     private var shouldReconnect = false
     private var reconnectAttempts = 0
     private var reconnectWorkItem: DispatchWorkItem?
+    private var token: String?
 
     public init() {}
 
-    public func connect(to host: String = "127.0.0.1", port: UInt16 = 47832, state: AurorState) {
+    public func connect(to host: String = "127.0.0.1", port: UInt16 = 47832, state: AurorState, token: String? = nil) {
         self.host = host
         self.port = port
         self.state = state
+        self.token = token
         shouldReconnect = true
         reconnectWorkItem?.cancel()
 
@@ -36,8 +38,12 @@ public final class HotReloadClient {
             return
         }
 
+        var request = URLRequest(url: url)
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         status = .connecting
-        webSocketTask = URLSession.shared.webSocketTask(with: url)
+        webSocketTask = URLSession.shared.webSocketTask(with: request)
         webSocketTask?.resume()
         status = .connected
         receiveLoop()
@@ -84,7 +90,7 @@ public final class HotReloadClient {
         let delay = min(30.0, 0.5 * pow(2.0, Double(min(reconnectAttempts, 6))))
         let item = DispatchWorkItem { [weak self] in
             guard let self, let st = self.state else { return }
-            self.connect(to: self.host, port: self.port, state: st)
+            self.connect(to: self.host, port: self.port, state: st, token: self.token)
         }
         reconnectWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)

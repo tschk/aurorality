@@ -90,6 +90,19 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
     let server = match &serve {
         Some(s) => {
             let port = s.port;
+            let token = if s.host.is_loopback() {
+                None
+            } else {
+                let token = std::env::var("AURORALITY_DEV_TOKEN").map_err(|_| {
+                    anyhow::anyhow!("AURORALITY_DEV_TOKEN is required for non-loopback hot reload")
+                })?;
+                if token.is_empty() || !token.bytes().all(|c| (0x21..=0x7e).contains(&c)) {
+                    anyhow::bail!(
+                        "AURORALITY_DEV_TOKEN must be nonempty printable ASCII without spaces"
+                    );
+                }
+                Some(token)
+            };
             let address = std::net::SocketAddr::new(s.host, port);
             let listener = std::net::TcpListener::bind(address)
                 .map_err(|e| anyhow::anyhow!("hot-reload server: bind {address}: {e}"))?;
@@ -100,6 +113,7 @@ pub fn run(watch_views: PathBuf, serve: Option<Serve>) -> anyhow::Result<()> {
                     watch_dir: cwd.join(&watch_views),
                     ir_enabled: s.ir_enabled,
                     swiftgen: s.swiftgen.clone(),
+                    token,
                 },
             ))
         }
