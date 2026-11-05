@@ -27,7 +27,7 @@ public final class HotReloadClient {
         self.host = host
         self.port = port
         self.state = state
-        self.token = token
+        self.token = token ?? ProcessInfo.processInfo.environment["AURORALITY_DEV_TOKEN"]
         shouldReconnect = true
         reconnectWorkItem?.cancel()
 
@@ -39,7 +39,7 @@ public final class HotReloadClient {
         }
 
         var request = URLRequest(url: url)
-        if let token {
+        if let token = self.token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         status = .connecting
